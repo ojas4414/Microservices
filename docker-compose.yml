@@ -1,0 +1,58 @@
+version: "3.9"
+
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  main-api:
+    build:
+      context: .
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000 --reload
+    ports:
+      - "8000:8000"
+    depends_on:
+      - redis
+    environment:
+      - REDIS_HOST=redis
+
+  user-profile:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: uvicorn backend.user_profile:app --host 0.0.0.0 --port 8001 --reload
+    ports:
+      - "8001:8001"
+
+  recommend:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: uvicorn backend.recommend:app --host 0.0.0.0 --port 8002 --reload
+    ports:
+      - "8002:8002"
+
+  order:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: uvicorn backend.order:app --host 0.0.0.0 --port 8003 --reload
+    ports:
+      - "8003:8003"
+
+  payment:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: uvicorn backend.payment:app --host 0.0.0.0 --port 8004 --reload
+    ports:
+      - "8004:8004"
+
+  notification:
+    build:
+      context: .
+      dockerfile: Dockerfile.services
+    command: uvicorn backend.notification:app --host 0.0.0.0 --port 8005 --reload
+    ports:
+      - "8005:8005"

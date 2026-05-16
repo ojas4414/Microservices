@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NexusGuard — Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #030710; --surface: #0d1117; --surface2: #111827;
+  --border: #1e2d3d; --text: #e2e8f0; --muted: #64748b;
+  --cyan: #22d3ee; --green: #34d399; --red: #f87171;
+  --amber: #fbbf24; --purple: #a78bfa; --blue: #60a5fa;
+}
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; overflow:hidden; }
+body {
+  background: var(--bg); color: var(--text);
+  font-family: 'DM Sans', sans-serif; font-size:13px;
+  display:flex; flex-direction:column;
+}
+
+/* MOBILE WARNING */
+.mobile-warn {
+  display:none; position:fixed; inset:0; z-index:999;
+  background:var(--bg); align-items:center; justify-content:center;
+  flex-direction:column; gap:16px; text-align:center; padding:32px;
+}
+.mobile-warn p { color:var(--muted); font-size:14px; }
+.mobile-warn a { color:var(--cyan); text-decoration:none; }
+
+/* NAV */
+nav {
+  display:flex; align-items:center; justify-content:space-between;
+  padding:0 16px; height:44px; flex-shrink:0;
+  background:var(--bg); border-bottom:0.5px solid var(--border);
+}
+.nav-logo { display:flex; align-items:center; gap:8px; }
+.logo-hex  { color:var(--cyan); font-size:16px; font-weight:700; font-family:'JetBrains Mono',monospace; }
+.logo-name { font-size:13px; font-weight:600; }
+.logo-tag  { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); border:0.5px solid var(--border); padding:1px 5px; border-radius:3px; }
+.nav-right { display:flex; align-items:center; gap:16px; }
+.nav-back  { color:var(--muted); text-decoration:none; font-size:12px; font-family:'JetBrains Mono',monospace; transition:color 0.2s; }
+.nav-back:hover { color:var(--text); }
+.conn-status {
+  display:flex; align-items:center; gap:6px;
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+}
+.conn-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); }
+.conn-dot.live    { background:var(--green); animation:pulse-dot 1.5s infinite; }
+.conn-dot.offline { background:var(--red); }
+@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
+
+/* MAIN GRID */
+.grid {
+  flex:1; display:grid;
+  grid-template-columns: 300px 1fr 300px;
+  gap:8px; padding:8px; overflow:hidden; min-height:0;
+}
+
+/* PANEL BASE */
+.panel {
+  background:var(--surface); border:0.5px solid var(--border);
+  border-radius:6px; display:flex; flex-direction:column; overflow:hidden;
+}
+.panel-hdr {
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:var(--muted); letter-spacing:0.12em;
+  padding:10px 12px; border-bottom:0.5px solid var(--border);
+  flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+}
+.panel-hdr-badge {
+  font-size:9px; padding:1px 6px; border-radius:2px;
+  font-family:'JetBrains Mono',monospace;
+}
+.badge-green { background:#34d39922; color:var(--green); }
+.badge-amber { background:#fbbf2422; color:var(--amber); }
+
+/* LEFT — CALL FEED */
+.feed-body { flex:1; overflow-y:auto; overflow-x:hidden; }
+.feed-body::-webkit-scrollbar { width:3px; }
+.feed-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+.feed-entry {
+  display:grid; grid-template-columns: auto 14px auto 1fr auto 52px;
+  align-items:center; gap:6px;
+  padding:6px 10px; border-bottom:0.5px solid var(--border);
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  animation:slideIn 0.25s ease;
+}
+@keyframes slideIn { from{transform:translateY(-16px);opacity:0} to{transform:translateY(0);opacity:1} }
+.feed-entry.hit  { background:#34d39908; }
+.feed-entry.miss { background:#f8717108; }
+.fe-from { color:var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fe-arr  { color:var(--muted); }
+.fe-to   { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.fe-lat  { color:var(--muted); text-align:right; }
+.fe-badge {
+  font-size:9px; padding:1px 5px; border-radius:2px;
+  text-align:center; font-weight:500;
+}
+.fe-badge.hit  { background:#34d39922; color:var(--green); }
+.fe-badge.miss { background:#f8717122; color:var(--red); }
+.feed-empty {
+  display:flex; align-items:center; justify-content:center;
+  height:100%; color:var(--muted);
+  font-family:'JetBrains Mono',monospace; font-size:11px;
+}
+
+/* CENTER — GRAPH */
+.graph-panel { position:relative; }
+.graph-canvas-wrap { flex:1; position:relative; overflow:hidden; }
+#dash-graph { width:100%; height:100%; display:block; }
+.edge-popup {
+  position:absolute; z-index:10;
+  background:var(--surface2); border:0.5px solid var(--border);
+  border-radius:5px; padding:8px 12px;
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  pointer-events:none; display:none; min-width:150px;
+}
+.popup-route { color:var(--cyan); margin-bottom:5px; font-weight:600; }
+.popup-stat  { color:var(--muted); margin-bottom:2px; }
+.popup-stat span { color:var(--text); }
+.graph-legend-row {
+  display:flex; gap:14px; padding:8px 12px;
+  border-top:0.5px solid var(--border); flex-shrink:0;
+}
+.leg { display:flex; align-items:center; gap:4px; font-family:'JetBrains Mono',monospace; font-size:9px; }
+.leg.cached  { color:var(--green); }
+.leg.live    { color:var(--blue);  }
+.leg.prewarm { color:var(--amber); }
+.leg.spike   { color:var(--red);   }
+
+/* RIGHT — 3 stacked panels */
+.right-col { display:flex; flex-direction:column; gap:8px; overflow:hidden; }
+.right-panel {
+  background:var(--surface); border:0.5px solid var(--border);
+  border-radius:6px; flex:1; display:flex; flex-direction:column; overflow:hidden;
+  min-height:0;
+}
+.right-body { flex:1; overflow-y:auto; padding:12px; }
+.right-body::-webkit-scrollbar { width:3px; }
+.right-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+
+/* LSTM panel */
+.seq-row-d { display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
+.seq-svc-d {
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:var(--cyan); background:#22d3ee10; border:0.5px solid #22d3ee33;
+  border-radius:3px; padding:4px 8px;
+}
+.seq-arr-d { color:var(--muted); font-size:13px; }
+.pred-lbl { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:0.1em; margin-bottom:4px; }
+.pred-svc-d {
+  font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700;
+  color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:8px;
+}
+.prewarm-d { font-size:9px; color:var(--amber); border:0.5px solid var(--amber); padding:1px 6px; border-radius:2px; display:none; }
+.conf-row-d { display:flex; align-items:center; gap:8px; }
+.conf-bar-d { flex:1; height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
+.conf-fill-d { height:100%; background:var(--cyan); border-radius:2px; width:0%; transition:width 0.6s cubic-bezier(0.4,0,0.2,1); }
+.conf-pct-d { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--cyan); min-width:32px; }
+
+/* COST INTEL panel */
+.cost-grid { display:flex; flex-direction:column; gap:10px; }
+.cost-row-d { display:flex; flex-direction:column; padding-bottom:10px; border-bottom:0.5px solid var(--border); }
+.cost-row-d:last-child { border:none; padding:0; }
+.cost-k { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:0.1em; margin-bottom:3px; }
+.cost-v { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:var(--amber); }
+.cost-v.sm { font-size:13px; color:var(--text); }
+.cost-v.green { color:var(--green); }
+
+/* HEALTH panel */
+.health-list { display:flex; flex-direction:column; gap:6px; }
+.svc-row {
+  display:flex; align-items:center; gap:8px;
+  padding:6px 0; border-bottom:0.5px solid var(--border);
+}
+.svc-row:last-child { border:none; }
+.svc-dot {
+  width:7px; height:7px; border-radius:50%; flex-shrink:0;
+  background:var(--muted);
+}
+.svc-dot.healthy { background:var(--green); animation:pulse-dot 2s infinite; }
+.svc-dot.offline { background:var(--red); }
+.svc-name  { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text); flex:1; }
+.svc-port  { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); }
+.svc-state { font-family:'JetBrains Mono',monospace; font-size:9px; min-width:48px; text-align:right; }
+.svc-state.healthy { color:var(--green); }
+.svc-state.offline { color:var(--red); }
+.svc-state.checking { color:var(--muted); }
+
+/* METRICS BAR */
+.metrics-bar {
+  flex-shrink:0; height:40px;
+  display:flex; align-items:center;
+  background:var(--surface); border-top:0.5px solid var(--border);
+  padding:0 16px; gap:0; overflow:hidden;
+}
+.metric {
+  display:flex; align-items:center; gap:8px;
+  padding:0 16px; border-right:0.5px solid var(--border);
+  font-family:'JetBrains Mono',monospace; font-size:10px;
+  color:var(--muted); white-space:nowrap;
+}
+.metric:first-child { padding-left:0; }
+.metric:last-child  { border:none; }
+.metric span { font-size:12px; font-weight:600; }
+.metric span.green  { color:var(--green); }
+.metric span.red    { color:var(--red); }
+.metric span.cyan   { color:var(--cyan); }
+.metric span.amber  { color:var(--amber); }
+.metric span.purple { color:var(--purple); }
+</style>
+</head>
+<body>
+
+<!-- Mobile warning -->
+<div class="mobile-warn" id="mobile-warn">
+  <p style="font-size:20px;color:var(--text)">Dashboard requires a wider screen</p>
+  <p>Minimum 1200px. You're on a smaller viewport.</p>
+  <a href="index.html">← Back to Overview</a>
+</div>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-logo">
+    <span class="logo-hex">⬡</span>
+    <span class="logo-name">NexusGuard</span>
+    <span class="logo-tag">DASHBOARD</span>
+  </div>
+  <div class="nav-right">
+    <div class="conn-status">
+      <div class="conn-dot" id="conn-dot"></div>
+      <span id="conn-label" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">CONNECTING</span>
+    </div>
+    <button id="sim-btn" onclick="toggleSim()" style="
+      background:transparent; border:0.5px solid var(--muted); color:var(--muted);
+      font-family:'JetBrains Mono',monospace; font-size:10px; padding:4px 12px;
+      border-radius:3px; cursor:pointer; transition:all 0.2s; letter-spacing:0.08em;
+    ">▶ SIMULATE</button>
+    <a href="index.html" class="nav-back">← Overview</a>
+  </div>
+</nav>
+
+<!-- MAIN 3-COLUMN GRID -->
+<div class="grid">
+
+  <!-- LEFT: LIVE CALL FEED -->
+  <div class="panel">
+    <div class="panel-hdr">
+      LIVE CALL FEED
+      <span class="panel-hdr-badge badge-green" id="feed-count">0 entries</span>
+    </div>
+    <div class="feed-body" id="feed-body">
+      <div class="feed-empty">Waiting for calls…</div>
+    </div>
+  </div>
+
+  <!-- CENTER: SERVICE GRAPH -->
+  <div class="panel graph-panel">
+    <div class="panel-hdr">SERVICE GRAPH</div>
+    <div class="graph-canvas-wrap">
+      <canvas id="dash-graph"></canvas>
+      <div class="edge-popup" id="edge-popup">
+        <div class="popup-route" id="popup-route"></div>
+        <div class="popup-stat">Calls: <span id="popup-calls"></span></div>
+        <div class="popup-stat">Cost: <span id="popup-cost"></span></div>
+        <div class="popup-stat">State: <span id="popup-state"></span></div>
+      </div>
+    </div>
+    <div class="graph-legend-row">
+      <span class="leg cached">● CACHED</span>
+      <span class="leg live">● LIVE</span>
+      <span class="leg prewarm">● PRE-WARMED</span>
+      <span class="leg spike">● SPIKE</span>
+    </div>
+  </div>
+
+  <!-- RIGHT: 3 STACKED PANELS -->
+  <div class="right-col">
+
+    <!-- LSTM -->
+    <div class="right-panel">
+      <div class="panel-hdr">LSTM PREDICTION</div>
+      <div class="right-body">
+        <div class="pred-lbl">LAST 3 CALLS</div>
+        <div class="seq-row-d">
+          <span class="seq-svc-d" id="d-seq0">—</span>
+          <span class="seq-arr-d">→</span>
+          <span class="seq-svc-d" id="d-seq1">—</span>
+          <span class="seq-arr-d">→</span>
+          <span class="seq-svc-d" id="d-seq2">—</span>
+        </div>
+        <div class="pred-lbl">PREDICTED NEXT</div>
+        <div class="pred-svc-d">
+          <span id="d-pred-svc">—</span>
+          <span class="prewarm-d" id="d-prewarm">⚡ PRE-WARMED</span>
+        </div>
+        <div class="conf-row-d">
+          <div class="conf-bar-d"><div class="conf-fill-d" id="d-conf-fill"></div></div>
+          <div class="conf-pct-d" id="d-conf-pct">0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- COST INTEL -->
+    <div class="right-panel">
+      <div class="panel-hdr">COST INTEL</div>
+      <div class="right-body">
+        <div class="cost-grid">
+          <div class="cost-row-d">
+            <div class="cost-k">TOTAL COST</div>
+            <div class="cost-v" id="d-cost-total">$—</div>
+          </div>
+          <div class="cost-row-d">
+            <div class="cost-k">HOTTEST ROUTE</div>
+            <div class="cost-v sm" id="d-hot-route">— → —</div>
+            <div class="cost-v" style="font-size:13px;color:var(--red)" id="d-hot-cost">$—</div>
+          </div>
+          <div class="cost-row-d">
+            <div class="cost-k">HIT RATE</div>
+            <div class="cost-v green" id="d-hit-rate">—%</div>
+          </div>
+          <div class="cost-row-d">
+            <div class="cost-k">COST SAVED (EST.)</div>
+            <div class="cost-v green" id="d-cost-saved">$—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SYSTEM HEALTH -->
+    <div class="right-panel">
+      <div class="panel-hdr">SYSTEM HEALTH</div>
+      <div class="right-body">
+        <div class="health-list" id="health-list">
+          <!-- populated by JS -->
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- METRICS BAR -->
+<div class="metrics-bar">
+  <div class="metric">TOTAL CALLS <span id="m-total">—</span></div>
+  <div class="metric">CACHE HITS  <span class="green" id="m-hits">—</span></div>
+  <div class="metric">MISSES      <span class="red"   id="m-miss">—</span></div>
+  <div class="metric">AVG LATENCY <span class="cyan"  id="m-lat">—ms</span></div>
+  <div class="metric">TOTAL COST  <span class="amber" id="m-cost">$—</span></div>
+  <div class="metric">PRE-WARMS   <span class="purple" id="m-prewarm">—</span></div>
+</div>
+
+<script>
+const API = 'http://localhost:8000';
+const EDGE_COLORS = { cached:'#34d399', live:'#60a5fa', prewarmed:'#fbbf24', spike:'#f87171' };
+
+// ── Mobile check ──────────────────────────────────────────────────
+if (window.innerWidth < 1200) {
+  document.getElementById('mobile-warn').style.display = 'flex';
+}
+
+// ── Number animation ──────────────────────────────────────────────
+function animNum(el, target, fmt) {
+  if (!el) return;
+  const cur = parseFloat(el.dataset.v ?? '0');
+  if (Math.abs(cur - target) < 0.000001 && el.textContent !== '—') return;
+  el.dataset.v = target;
+  const diff = target - cur, t0 = performance.now(), dur = 450;
+  const step = now => {
+    const p = Math.min((now - t0) / dur, 1);
+    el.textContent = fmt(cur + diff * (1 - Math.pow(1 - p, 3)));
+    if (p < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
+
+// ── Service Graph (same as landing, adapted for dashboard) ────────
+class ServiceGraph {
+  constructor(canvasEl, popupEl) {
+    this.canvas = canvasEl;
+    this.ctx = canvasEl.getContext('2d');
+    this.popup = popupEl;
+    this.dragging = null;
+    this.particles = [];
+    this.lastSpawn = 0;
+
+    this.nodes = [
+      { id:'nexusguard',   label:'NexusGuard',   rx:0.42, ry:0.44, r:28, color:'#22d3ee' },
+      { id:'redis',        label:'Redis',         rx:0.16, ry:0.20, r:20, color:'#fbbf24' },
+      { id:'auth',         label:'auth',          rx:0.18, ry:0.72, r:20, color:'#a78bfa' },
+      { id:'user-profile', label:'user-profile',  rx:0.62, ry:0.22, r:20, color:'#34d399' },
+      { id:'recommend',    label:'recommend',     rx:0.84, ry:0.44, r:20, color:'#34d399' },
+      { id:'order',        label:'order',         rx:0.62, ry:0.72, r:20, color:'#34d399' },
+      { id:'payment',      label:'payment',       rx:0.42, ry:0.84, r:20, color:'#f87171' },
+      { id:'notification', label:'notification',  rx:0.22, ry:0.82, r:20, color:'#34d399' },
+    ];
+
+    this.edges = [
+      { from:'nexusguard',   to:'redis',        state:'cached', calls:0, cost:0 },
+      { from:'auth',         to:'user-profile', state:'live',   calls:0, cost:0 },
+      { from:'user-profile', to:'recommend',    state:'live',   calls:0, cost:0 },
+      { from:'auth',         to:'order',        state:'live',   calls:0, cost:0 },
+      { from:'order',        to:'payment',      state:'live',   calls:0, cost:0 },
+      { from:'payment',      to:'notification', state:'live',   calls:0, cost:0 },
+    ];
+
+    this._resize();
+    new ResizeObserver(() => this._resize()).observe(canvasEl.parentElement);
+    this._events();
+    this._loop();
+  }
+
+  get W() { return this.canvas.width; }
+  get H() { return this.canvas.height; }
+  _resize() {
+    this.canvas.width  = this.canvas.offsetWidth  || 400;
+    this.canvas.height = this.canvas.offsetHeight || 400;
+  }
+  _node(id) { return this.nodes.find(n => n.id === id); }
+  _pos(n)   { return { x: n.rx * this.W, y: n.ry * this.H }; }
+
+  _events() {
+    const c = this.canvas;
+    const mp = e => { const r = c.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
+    c.addEventListener('mousedown', e => {
+      const {x,y} = mp(e);
+      for (const n of this.nodes) {
+        const p = this._pos(n);
+        if (Math.hypot(x-p.x,y-p.y) <= n.r+4) { this.dragging = { n, ox:x/this.W-n.rx, oy:y/this.H-n.ry }; return; }
+      }
+      this._edgeClick(x,y);
+    });
+    c.addEventListener('mousemove', e => {
+      if (!this.dragging) return;
+      const {x,y} = mp(e);
+      this.dragging.n.rx = Math.max(0.05, Math.min(0.95, x/this.W - this.dragging.ox));
+      this.dragging.n.ry = Math.max(0.05, Math.min(0.95, y/this.H - this.dragging.oy));
+    });
+    c.addEventListener('mouseup',    () => { this.dragging = null; });
+    c.addEventListener('mouseleave', () => { this.dragging = null; });
+  }
+
+  _ptNear(px,py,x1,y1,x2,y2,t) {
+    const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy;
+    if(!l2) return false;
+    const u=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2));
+    return Math.hypot(px-x1-u*dx,py-y1-u*dy)<=t;
+  }
+
+  _edgeClick(x,y) {
+    for (const e of this.edges) {
+      const fn=this._node(e.from),tn=this._node(e.to);
+      if(!fn||!tn) continue;
+      const fp=this._pos(fn),tp=this._pos(tn);
+      if (this._ptNear(x,y,fp.x,fp.y,tp.x,tp.y,9)) {
+        const p=this.popup;
+        p.style.display='block'; p.style.left=(x+14)+'px'; p.style.top=(y-24)+'px';
+        document.getElementById('popup-route').textContent = `${e.from} → ${e.to}`;
+        document.getElementById('popup-calls').textContent = e.calls;
+        document.getElementById('popup-cost').textContent  = '$'+e.cost.toFixed(6);
+        document.getElementById('popup-state').textContent = e.state;
+        return;
+      }
+    }
+    this.popup.style.display='none';
+  }
+
+  _spawn() {
+    const now=Date.now(); if(now-this.lastSpawn<180) return; this.lastSpawn=now;
+    const active=this.edges.filter(e=>e.from==='nexusguard'||e.calls>0);
+    if(!active.length) return;
+    const e=active[Math.floor(Math.random()*active.length)];
+    this.particles.push({from:e.from,to:e.to,color:EDGE_COLORS[e.state]||EDGE_COLORS.live,t:0,spd:0.007+Math.random()*0.005});
+  }
+
+  _arrow(x1,y1,x2,y2,toR,color,lw) {
+    const ctx=this.ctx, a=Math.atan2(y2-y1,x2-x1);
+    const ex=x2-Math.cos(a)*(toR+3),ey=y2-Math.sin(a)*(toR+3);
+    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(ex,ey);
+    ctx.strokeStyle=color+'99';ctx.lineWidth=lw;ctx.stroke();
+    ctx.beginPath();ctx.moveTo(ex,ey);
+    ctx.lineTo(ex-8*Math.cos(a-0.4),ey-8*Math.sin(a-0.4));
+    ctx.lineTo(ex-8*Math.cos(a+0.4),ey-8*Math.sin(a+0.4));
+    ctx.closePath();ctx.fillStyle=color+'99';ctx.fill();
+  }
+
+  _draw() {
+    const ctx=this.ctx; ctx.clearRect(0,0,this.W,this.H);
+    for(const e of this.edges){
+      const fn=this._node(e.from),tn=this._node(e.to); if(!fn||!tn) continue;
+      const fp=this._pos(fn),tp=this._pos(tn);
+      this._arrow(fp.x,fp.y,tp.x,tp.y,tn.r,EDGE_COLORS[e.state]||EDGE_COLORS.live,Math.max(1,Math.min(3.5,1+e.calls*0.2)));
+    }
+    this._spawn();
+    this.particles=this.particles.filter(p=>{
+      p.t+=p.spd; if(p.t>=1) return false;
+      const fn=this._node(p.from),tn=this._node(p.to); if(!fn||!tn) return false;
+      const fp=this._pos(fn),tp=this._pos(tn);
+      const x=fp.x+(tp.x-fp.x)*p.t,y=fp.y+(tp.y-fp.y)*p.t;
+      ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);
+      ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
+      return true;
+    });
+    for(const n of this.nodes){
+      const p=this._pos(n);
+      ctx.beginPath();ctx.arc(p.x,p.y,n.r+6,0,Math.PI*2);ctx.fillStyle=n.color+'18';ctx.fill();
+      ctx.beginPath();ctx.arc(p.x,p.y,n.r,0,Math.PI*2);
+      ctx.fillStyle='#0d1117';ctx.strokeStyle=n.color;ctx.lineWidth=1.5;ctx.fill();ctx.stroke();
+      ctx.fillStyle=n.color;ctx.textAlign='center';ctx.textBaseline='middle';
+      const parts=n.label.split('-'),fs=n.id==='nexusguard'?11:9;
+      ctx.font=`${n.id==='nexusguard'?'600':'400'} ${fs}px "JetBrains Mono",monospace`;
+      if(parts.length>1){ctx.fillText(parts[0],p.x,p.y-6);ctx.fillText(parts[1],p.x,p.y+6);}
+      else ctx.fillText(n.label,p.x,p.y);
+    }
+  }
+
+  _loop() { this._draw(); requestAnimationFrame(()=>this._loop()); }
+
+  updateFromStats(data) {
+    if(!data.routes) return;
+    const map={};
+    for(const r of data.routes) map[`${r.from}|${r.to}`]={calls:r.calls,cost:r.cost};
+    for(const e of this.edges){
+      const k=`${e.from}|${e.to}`; if(map[k]){e.calls=map[k].calls;e.cost=map[k].cost;}
+    }
+    const hot=data.most_expensive_route;
+    for(const e of this.edges){
+      if(e.from==='nexusguard'){e.state='cached';continue;}
+      if(hot&&e.from===hot.from&&e.to===hot.to&&e.calls>2) e.state='spike';
+      else if(e.calls>0) e.state='live';
+    }
+  }
+
+  markPrewarmed(service) {
+    const e = this.edges.find(x=>x.to===service);
+    if(e) e.state='prewarmed';
+  }
+}
+
+const graph = new ServiceGraph(
+  document.getElementById('dash-graph'),
+  document.getElementById('edge-popup')
+);
+
+// ── WebSocket call feed ───────────────────────────────────────────
+const seenIds = new Set();
+let feedCount = 0;
+
+function addToFeed(entry) {
+  const body = document.getElementById('feed-body');
+  const empty = body.querySelector('.feed-empty');
+  if (empty) empty.remove();
+
+  const key = `${entry.id}-${entry.from_service}-${entry.to_service}`;
+  if (seenIds.has(key)) return;
+  seenIds.add(key);
+  feedCount++;
+  document.getElementById('feed-count').textContent = feedCount + ' entries';
+
+  const div = document.createElement('div');
+  div.className = `feed-entry ${entry.cache === 'hit' ? 'hit' : 'miss'}`;
+  div.innerHTML = `
+    <span class="fe-from">${entry.from_service}</span>
+    <span class="fe-arr">→</span>
+    <span class="fe-to">${entry.to_service}</span>
+    <span class="fe-lat">${(entry.latency_ms||0).toFixed(0)}ms</span>
+    <span></span>
+    <span class="fe-badge ${entry.cache === 'hit' ? 'hit' : 'miss'}">${entry.cache === 'hit' ? 'CACHED' : 'MISS'}</span>
+  `;
+  body.prepend(div);
+  while (body.children.length > 20) body.lastElementChild.remove();
+}
+
+function connectWS() {
+  const dot   = document.getElementById('conn-dot');
+  const label = document.getElementById('conn-label');
+  let ws;
+  try {
+    ws = new WebSocket(`ws://localhost:8000/ws/calls`);
+  } catch { return; }
+
+  ws.onopen = () => {
+    dot.className = 'conn-dot live';
+    label.textContent = 'CONNECTED';
+    label.style.color = 'var(--green)';
+  };
+  ws.onmessage = e => {
+    try { addToFeed(JSON.parse(e.data)); } catch {}
+  };
+  ws.onclose = ws.onerror = () => {
+    dot.className = 'conn-dot offline';
+    label.textContent = 'OFFLINE';
+    label.style.color = 'var(--red)';
+    setTimeout(connectWS, 3000);
+  };
+}
+connectWS();
+
+// Fallback: also poll /logs to fill feed if WS misses entries
+let lastLogId = 0;
+async function pollLogs() {
+  try {
+    const r = await fetch(`${API}/logs`);
+    if (!r.ok) return;
+    const logs = await r.json();
+    // Walk in ascending order so we process oldest-new first
+    for (const log of logs.slice().reverse()) {
+      if (log.id > lastLogId) {
+        lastLogId = log.id;
+        // Only add if not already delivered via WebSocket
+        const key = `${log.id}-${log.from_service}-${log.to_service}`;
+        if (!seenIds.has(key)) {
+          addToFeed({
+            id: log.id,
+            from_service: log.from_service,
+            to_service:   log.to_service,
+            latency_ms:   log.latency_ms,
+            simulated_cost: log.simulated_cost,
+            cache: 'miss',   // DB entries are always misses (hits are served from Redis)
+          });
+        }
+      }
+    }
+  } catch {}
+}
+
+// ── Poll /stats every 2s ──────────────────────────────────────────
+async function fetchStats() {
+  try {
+    const r = await fetch(`${API}/stats`);
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+
+    animNum(document.getElementById('m-total'),  d.total_calls, v => Math.round(v).toLocaleString());
+    animNum(document.getElementById('m-hits'),    d.cache_hits,  v => Math.round(v).toLocaleString());
+    animNum(document.getElementById('m-miss'),    d.cache_misses,v => Math.round(v).toLocaleString());
+    animNum(document.getElementById('m-lat'),     d.avg_latency, v => v.toFixed(1)+'ms');
+    animNum(document.getElementById('m-cost'),    d.total_cost,  v => '$'+v.toFixed(4));
+    animNum(document.getElementById('m-prewarm'), d.pre_warms,   v => Math.round(v).toString());
+
+    graph.updateFromStats(d);
+    fetchCostPanel(d);
+  } catch {}
+}
+
+function fetchCostPanel(d) {
+  animNum(document.getElementById('d-cost-total'), d.total_cost, v => '$'+v.toFixed(6));
+  const h = d.most_expensive_route;
+  document.getElementById('d-hot-route').textContent = `${h.from} → ${h.to}`;
+  document.getElementById('d-hot-cost').textContent  = '$'+h.cost.toFixed(6);
+  animNum(document.getElementById('d-hit-rate'), d.hit_rate, v => v.toFixed(1)+'%');
+  const saved = d.total_cost * (d.hit_rate / 100);
+  animNum(document.getElementById('d-cost-saved'), saved, v => '$'+v.toFixed(6));
+}
+
+// ── Poll /predict every 3s ────────────────────────────────────────
+async function fetchPredict() {
+  try {
+    const r = await fetch(`${API}/predict`, { method:'POST' });
+    if (!r.ok) throw new Error();
+    const d = await r.json();
+    const three = d.last_three || [];
+    document.getElementById('d-seq0').textContent = three[0] ?? '—';
+    document.getElementById('d-seq1').textContent = three[1] ?? '—';
+    document.getElementById('d-seq2').textContent = three[2] ?? '—';
+    document.getElementById('d-pred-svc').textContent = d.predicted_next || '—';
+    const pct = Math.round((d.confidence||0)*100);
+    document.getElementById('d-conf-fill').style.width = pct+'%';
+    document.getElementById('d-conf-pct').textContent  = pct+'%';
+    const pw = document.getElementById('d-prewarm');
+    pw.style.display = d.pre_warmed ? 'inline-block' : 'none';
+    if (d.predicted_next && d.pre_warmed) graph.markPrewarmed(d.predicted_next);
+  } catch {}
+}
+
+// ── Health checks every 10s ───────────────────────────────────────
+const SERVICES = [
+  { name:'NexusGuard',   port:8000, url:`${API}/health` },
+  { name:'Redis',        port:6379, url: null },
+  { name:'user-profile', port:8001, url:`${API}/health/user-profile` },
+  { name:'recommend',    port:8002, url:`${API}/health/recommend` },
+  { name:'order',        port:8003, url:`${API}/health/order` },
+  { name:'payment',      port:8004, url:`${API}/health/payment` },
+  { name:'notification', port:8005, url:`${API}/health/notification` },
+];
+
+function buildHealthList() {
+  const list = document.getElementById('health-list');
+  list.innerHTML = SERVICES.map((s,i) => `
+    <div class="svc-row" id="hr-${i}">
+      <div class="svc-dot checking" id="hd-${i}"></div>
+      <div class="svc-name">${s.name}</div>
+      <div class="svc-port">:${s.port}</div>
+      <div class="svc-state checking" id="hs-${i}">CHECKING</div>
+    </div>
+  `).join('');
+}
+
+async function checkHealth() {
+  for (let i = 0; i < SERVICES.length; i++) {
+    const s = SERVICES[i];
+    const dot   = document.getElementById(`hd-${i}`);
+    const state = document.getElementById(`hs-${i}`);
+    if (!s.url) {
+      // Redis: infer from main API being up
+      const mainUp = document.getElementById('hs-0')?.textContent === 'HEALTHY';
+      dot.className   = `svc-dot ${mainUp ? 'healthy' : 'offline'}`;
+      state.className = `svc-state ${mainUp ? 'healthy' : 'offline'}`;
+      state.textContent = mainUp ? 'HEALTHY' : 'UNKNOWN';
+      continue;
+    }
+    try {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 3000);
+      const r    = await fetch(s.url, { signal: ctrl.signal });
+      clearTimeout(tid);
+      const ok = r.ok;
+      dot.className   = `svc-dot ${ok ? 'healthy' : 'offline'}`;
+      state.className = `svc-state ${ok ? 'healthy' : 'offline'}`;
+      state.textContent = ok ? 'HEALTHY' : 'DEGRADED';
+    } catch {
+      dot.className   = 'svc-dot offline';
+      state.className = 'svc-state offline';
+      state.textContent = 'OFFLINE';
+    }
+  }
+}
+
+// ── Simulate toggle ──────────────────────────────────────────────
+let simRunning = false;
+async function toggleSim() {
+  const btn = document.getElementById('sim-btn');
+  if (!simRunning) {
+    try {
+      await fetch(`${API}/simulate/start`, { method: 'POST' });
+      simRunning = true;
+      btn.textContent = '■ STOP SIM';
+      btn.style.borderColor = 'var(--cyan)';
+      btn.style.color = 'var(--cyan)';
+    } catch {}
+  } else {
+    try {
+      await fetch(`${API}/simulate/stop`, { method: 'POST' });
+      simRunning = false;
+      btn.textContent = '▶ SIMULATE';
+      btn.style.borderColor = 'var(--muted)';
+      btn.style.color = 'var(--muted)';
+    } catch {}
+  }
+}
+
+// Auto-retrain LSTM every 15s when simulation is running so predictions evolve
+setInterval(async () => {
+  if (!simRunning) return;
+  try { await fetch(`${API}/train`, { method: 'POST' }); } catch {}
+}, 15000);
+
+// ── Boot ──────────────────────────────────────────────────────────
+buildHealthList();
+fetchStats();
+fetchPredict();
+pollLogs();
+checkHealth();
+
+setInterval(fetchStats,   2000);
+setInterval(fetchPredict, 3000);
+setInterval(pollLogs,     1500);
+setInterval(checkHealth,  10000);
+</script>
+</body>
+</html>
