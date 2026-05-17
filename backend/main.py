@@ -162,11 +162,15 @@ def stats():
     conn = sqlite3.connect("nexusguard.db")
     cursor = conn.cursor()
 
-    cursor.execute("SELECT COUNT(*), SUM(simulated_cost), AVG(latency_ms) FROM call_logs")
+    cursor.execute("SELECT COUNT(*), SUM(simulated_cost) FROM call_logs")
     row = cursor.fetchone()
     db_calls   = row[0] or 0
     total_cost = round(row[1] or 0.0, 6)
-    avg_latency = round(row[2] or 0.0, 2)
+
+    cursor.execute("SELECT cache_status, AVG(latency_ms) FROM call_logs GROUP BY cache_status")
+    lat_by_status = {r[0]: round(r[1] or 0.0, 2) for r in cursor.fetchall()}
+    hit_latency  = lat_by_status.get("hit", 0.0)
+    miss_latency = lat_by_status.get("miss", 0.0)
 
     cursor.execute("""
         SELECT from_service, to_service, SUM(simulated_cost), COUNT(*) as cnt
@@ -199,7 +203,8 @@ def stats():
         "cache_misses": db_calls,
         "hit_rate": hit_rate,
         "total_cost": total_cost,
-        "avg_latency": avg_latency,
+        "hit_latency": hit_latency,
+        "miss_latency": miss_latency,
         "pre_warms": pre_warms,
         "most_expensive_route": {
             "from": expensive[0] if expensive else "—",
