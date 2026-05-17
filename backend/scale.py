@@ -14,27 +14,27 @@ SERVICE_CONFIG = {
     "user-profile": {
         "image":   "nexusguard-user-profile",
         "command": "uvicorn backend.user_profile:app --host 0.0.0.0 --port 8001 --reload",
-        "base_port": 8001,
+        "container_port": 8001,
     },
     "recommend": {
         "image":   "nexusguard-recommend",
         "command": "uvicorn backend.recommend:app --host 0.0.0.0 --port 8002 --reload",
-        "base_port": 8002,
+        "container_port": 8002,
     },
     "order": {
         "image":   "nexusguard-order",
         "command": "uvicorn backend.order:app --host 0.0.0.0 --port 8003 --reload",
-        "base_port": 8003,
+        "container_port": 8003,
     },
     "payment": {
         "image":   "nexusguard-payment",
         "command": "uvicorn backend.payment:app --host 0.0.0.0 --port 8004 --reload",
-        "base_port": 8004,
+        "container_port": 8004,
     },
     "notification": {
         "image":   "nexusguard-notification",
         "command": "uvicorn backend.notification:app --host 0.0.0.0 --port 8005 --reload",
-        "base_port": 8005,
+        "container_port": 8005,
     },
 }
 
@@ -55,6 +55,18 @@ SERVICE_PORT_BASE = {
     "notification": 9500,
 }
 
+def _alive(containers: list):
+    live = []
+    for container in containers:
+        try:
+            container.reload()
+            if container.status == "running":
+                live.append(container)
+        except Exception:
+            continue
+    return live
+
+
 def scaling(service: str, number: int = 1):
     config = SERVICE_CONFIG.get(service)
     if not config:
@@ -62,9 +74,14 @@ def scaling(service: str, number: int = 1):
 
     spun = []
     base = SERVICE_PORT_BASE.get(service, 9000)
-    existing = len(extras.get(service, []))
+    extras[service] = _alive(extras.get(service, []))
+    existing = len(extras[service])
+    missing = max(0, number - existing)
 
-    for i in range(number):
+    if missing == 0:
+        return []
+
+    for i in range(missing):
         port = base + existing + i
 
         try:
@@ -73,12 +90,10 @@ def scaling(service: str, number: int = 1):
                 command=config["command"],
                 detach=True,
                 network="nexusguard_default",
-                ports={f"8001/tcp": port},
+                ports={f"{config['container_port']}/tcp": port},
                 name=f"nexusguard-{service}-extra-{port}",
                 remove=True,
             )
-            if service not in extras:
-                extras[service] = []
             extras[service].append(container)
             spun.append(port)
             print(f"[scaler] scaled up {service} on port {port}")
@@ -90,7 +105,7 @@ def scaling(service: str, number: int = 1):
 
 
 def scale_down(service: str):
-    containers = extras.get(service, [])
+    containers = _alive(extras.get(service, []))
     killed = []
 
     for container in containers:
@@ -115,7 +130,8 @@ def scale_down_all():
 def get_active():
     result = {}
     for s in SERVICE_CONFIG:
-        extra_count = len(extras.get(s, []))
+        extras[s] = _alive(extras.get(s, []))
+        extra_count = len(extras[s])
         result[s] = {
             "base": 1,
             "extra": extra_count,

@@ -1,11 +1,15 @@
+import os
+import random
+
 import torch
 import torch.nn as nn
-import random
+
+from backend.database import get_last_windows
 
 SERVICES = ["user-profile", "recommend", "order", "payment", "notification"]
 N = len(SERVICES)
 SEQ_LEN = 12
-THRESHOLD = 50
+THRESHOLD = int(os.environ.get("FORECAST_THRESHOLD", "9"))
 
 
 class VolumeForecaster(nn.Module):
@@ -50,12 +54,36 @@ def generate_synthetic_data(n_samples=500):
     return X, Y
 
 
+def build_real_training_data(history_size=60):
+    windows = get_last_windows(history_size)
+    if len(windows) <= SEQ_LEN:
+        return None, None
+
+    X, Y = [], []
+    for idx in range(len(windows) - SEQ_LEN):
+        X.append(windows[idx:idx + SEQ_LEN])
+        Y.append(windows[idx + SEQ_LEN])
+
+    if not X:
+        return None, None
+
+    return (
+        torch.tensor(X, dtype=torch.float32),
+        torch.tensor(Y, dtype=torch.float32),
+    )
+
+
 def train():
     model = VolumeForecaster()
     optimizer = torch.optim.Adam(model.parameters(), lr=0.01)
     criterion = nn.MSELoss()
-    X, Y = generate_synthetic_data(500)
-    for epoch in range(150):
+    X, Y = build_real_training_data()
+    epochs = 120
+    if X is None or Y is None:
+        X, Y = generate_synthetic_data(500)
+        epochs = 150
+
+    for epoch in range(epochs):
         optimizer.zero_grad()
         output = model(X)
         loss = criterion(output, Y)

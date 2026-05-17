@@ -16,6 +16,7 @@ services:
       - redis
     environment:
       - REDIS_HOST=redis
+      - FORECAST_THRESHOLD=9
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
 

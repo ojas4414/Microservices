@@ -407,6 +407,26 @@ def scale_down_endpoint():
     return {"status": "scaled_down", "killed": killed}
 
 
+@app.post("/scale/purge")
+def scale_purge():
+    """Force-kill ALL extra containers by name pattern — handles orphans after restart."""
+    import docker as docker_lib
+    try:
+        client = docker_lib.from_env()
+        killed = []
+        for container in client.containers.list():
+            if "extra" in container.name:
+                try:
+                    container.stop(timeout=3)
+                    killed.append(container.name)
+                except Exception:
+                    pass  # container already dead, ignore
+        scale_down_all()
+    except Exception as e:
+        return {"killed": [], "error": str(e)}
+    return {"killed": killed}
+
+
 @app.post("/train")
 def training():
     global forecaster_model

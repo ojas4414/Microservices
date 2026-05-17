@@ -214,7 +214,7 @@ main{display:grid;grid-template-columns:300px 1fr 260px;grid-template-rows:1fr 1
         </div>
         <div class="ldiv">Volume Forecaster</div>
         <div class="lpred">
-          <div class="lp-lbl">Predicted spike</div>
+          <div class="lp-lbl" id="lphead">Forecast status</div>
           <div class="lp-svc" id="lpred">Waiting...</div>
           <div class="crow"><span>conf</span><div class="ctrack"><div class="cfill" id="lcf" style="width:0%"></div></div><span id="lpct">—</span></div>
           <div class="pwarm" id="lpw">⚡ Monitoring patterns</div>
@@ -247,7 +247,6 @@ main{display:grid;grid-template-columns:300px 1fr 260px;grid-template-rows:1fr 1
     <div class="graph-btns">
       <button class="gbtn gbtn-spike" onclick="triggerSpike()">◈ TRIGGER SPIKE</button>
       <button class="gbtn gbtn-down" onclick="scaleDown()">▼ SCALE DOWN</button>
-      <button class="gbtn gbtn-down" onclick="runForecast()">⟳ FORECAST</button>
     </div>
 
     <!-- NODE POPUP -->
@@ -496,10 +495,12 @@ function closeNodePop(){document.getElementById('node-popup').style.display='non
 
 async function nodeScaleUp(){
   if(!selNode||selNode.id==='gw'||selNode.id==='rd')return;
-  setStatus('Scaling up...');
+  setStatus('Running forecast...');
   try{
-    await fetch(`${API}/forecast`,{method:'POST'});
-    setStatus('Scale triggered — check instances panel');
+    const d=await runForecast();
+    if(!d){setStatus('Forecast failed');return}
+    const spikes=d.spike_services||[];
+    setStatus(spikes.length>0?`Scale triggered for ${spikes.join(', ')}`:'Forecast complete - no spike detected');
   }catch(e){setStatus('Error: '+e.message)}
 }
 async function nodeFlushCache(){
@@ -603,8 +604,28 @@ function gLoop(){if(autoRot&&!dragNode)rotY+=.0025;drawGraph();requestAnimationF
 gcRsz();addEventListener('resize',gcRsz);gLoop();
 
 // ── WEBSOCKET ─────────────────────────────────────────────────
+const SVC_TO_NODE={'user-profile':'up','recommend':'rc','order':'or','payment':'py','notification':'nt','auth':'gw'};
 let totCost=0,totSaved=0;
+let forecastInterval=null;
 const seenIds=new Set();
+function renderForecastCard({title, main, status, width, detail, fill}){
+  document.querySelector('.lpred .crow span').textContent='status';
+  document.getElementById('lphead').textContent=title;
+  document.getElementById('lpred').textContent=main;
+  document.getElementById('lpct').textContent=status;
+  document.getElementById('lcf').style.width=width;
+  document.getElementById('lcf').style.background=fill;
+  document.getElementById('lpw').textContent=detail;
+}
+
+renderForecastCard({
+  title:'Forecast status',
+  main:'Waiting...',
+  status:'-',
+  width:'0%',
+  detail:'Waiting for forecast data',
+  fill:'linear-gradient(to right,var(--blue),var(--cyan))',
+});
 function connectWS(){
   const ws=new WebSocket('ws://localhost:8000/ws/calls');
   ws.onmessage=e=>{
@@ -615,7 +636,8 @@ function connectWS(){
     if(d.cache==='hit')totSaved+=.000002*50;
     document.getElementById('ct').textContent='$'+totCost.toFixed(4);
     document.getElementById('cs').textContent='$'+totSaved.toFixed(4);
-    const edge=EDGES.find(ed=>ed.f===d.from_service&&ed.t===d.to_service);
+    const toId=SVC_TO_NODE[d.to_service];
+    const edge=toId?EDGES.find(ed=>ed.t===toId):null;
     if(edge&&d.cache){
       const tm={'hit':'cached','miss':'live','prewarmed':'prewarm','spike':'spike'};
       edge.state=tm[d.cache]||'live';
@@ -655,10 +677,14 @@ function addFeed(d){
 async function pollStats(){
   try{
     const d=await(await fetch(`${API}/stats`)).json();
+    totCost=d.total_cost||0;
+    totSaved=(d.cache_hits||0)*0.0001;
     document.getElementById('hh').textContent=(d.cache_hits||0).toLocaleString();
     document.getElementById('hr').textContent=(d.hit_rate||0)+'%';
     document.getElementById('hc').textContent=(d.total_calls||0).toLocaleString();
     document.getElementById('hl').textContent=(d.avg_latency||0)+'ms';
+    document.getElementById('ct').textContent='$'+totCost.toFixed(4);
+    document.getElementById('cs').textContent='$'+totSaved.toFixed(4);
     document.getElementById('ss-hr').textContent=(d.hit_rate||0)+'%';
     document.getElementById('ss-lat').textContent=(d.avg_latency||0)+'ms';
     document.getElementById('ss-cost').textContent='$'+(d.total_cost||0).toFixed(4);
@@ -669,29 +695,43 @@ async function pollStats(){
 
 // ── INSTANCES ─────────────────────────────────────────────────
 const SVC_MAP={'user-profile':'ir-user-profile',recommend:'ir-recommend',order:'ir-order',payment:'ir-payment',notification:'ir-notification'};
+function renderInstances(d){
+  if(!d)return;
+  Object.entries(d).forEach(([svc,info])=>{
+    const row=document.getElementById(SVC_MAP[svc]);if(!row)return;
+    const num=row.querySelector('.inst-num');if(num)num.textContent=info.total;
+    let ex=row.querySelector('.inst-extra');
+    if(info.extra>0){
+      if(!ex){ex=document.createElement('span');ex.className='inst-extra';row.querySelector('.inst-right').appendChild(ex)}
+      ex.textContent=`+${info.extra}`;row.classList.add('scaling');
+    }else{if(ex)ex.remove();row.classList.remove('scaling')}
+    const node=NODES.find(n=>n.label===svc);
+    if(node)node.hits=info.total+'x';
+  });
+}
 async function pollInst(){
   try{
     const d=await(await fetch(`${API}/instances`)).json();
-    Object.entries(d).forEach(([svc,info])=>{
-      const row=document.getElementById(SVC_MAP[svc]);if(!row)return;
-      const num=row.querySelector('.inst-num');if(num)num.textContent=info.total;
-      let ex=row.querySelector('.inst-extra');
-      if(info.extra>0){
-        if(!ex){ex=document.createElement('span');ex.className='inst-extra';row.querySelector('.inst-right').appendChild(ex)}
-        ex.textContent=`+${info.extra}`;row.classList.add('scaling');
-      }else{if(ex)ex.remove();row.classList.remove('scaling')}
-      const node=NODES.find(n=>n.label===svc);
-      if(node)node.hits=info.total+'x';
-    });
+    renderInstances(d);
   }catch(e){}
   setTimeout(pollInst,2000);
 }pollInst();
 
 // ── FORECAST ─────────────────────────────────────────────────
 const FB={'user-profile':{b:'ff-up',v:'fv-up'},recommend:{b:'ff-rc',v:'fv-rc'},order:{b:'ff-or',v:'fv-or'},payment:{b:'ff-py',v:'fv-py'},notification:{b:'ff-nt',v:'fv-nt'}};
+function startForecastLoop(){
+  if(forecastInterval===null)forecastInterval=setInterval(runForecast,15000);
+}
+function stopForecastLoop(){
+  if(forecastInterval!==null){
+    clearInterval(forecastInterval);
+    forecastInterval=null;
+  }
+}
 async function runForecast(){
   try{
     const d=await(await fetch(`${API}/forecast`,{method:'POST'})).json();
+    if(d.instances)renderInstances(d.instances);
     if(d.predictions){
       const max=Math.max(...Object.values(d.predictions),1);
       Object.entries(d.predictions).forEach(([svc,cnt])=>{
@@ -701,40 +741,121 @@ async function runForecast(){
         if(bar){bar.style.width=(cnt/max*100)+'%';bar.style.background=isp?'var(--coral)':'var(--cyan)'}
         if(val){val.textContent=cnt;val.style.color=isp?'var(--coral)':'var(--text)'}
       });
-      if(d.spike_services?.length){
-        document.getElementById('lpred').textContent=d.spike_services.join(', ');
-        document.getElementById('lcf').style.width='94%';document.getElementById('lpct').textContent='94%';
-        document.getElementById('lpw').textContent='⚡ Scaling: '+d.spike_services.join(', ');
-      }
+      const spikes=d.spike_services||[];
+      const preds=d.predictions||{};
+      const topEntry=Object.entries(preds).sort((a,b)=>b[1]-a[1])[0]||['-',0];
+      const topSvc=topEntry[0];
+      const topVal=topEntry[1];
+      const feedItems=document.querySelectorAll('#live-feed .fi-route');
+      const last3=[...feedItems].slice(0,3).map(el=>el.textContent.split(' ').pop()||'-');
+      ['ls0','ls1','ls2'].forEach((id,i)=>{
+        const el=document.getElementById(id);
+        if(el){el.textContent=last3[i]||'-';el.classList.toggle('on',i<2)}
+      });
+      renderForecastCard({
+        title:spikes.length>0?'Predicted spike':'Forecast status',
+        main:spikes.length>0?spikes.join(', '):'No spike detected',
+        status:spikes.length>0?'ACTIVE':'NORMAL',
+        width:spikes.length>0?'100%':'36%',
+        detail:spikes.length>0
+          ?`Top forecast: ${topSvc} (${topVal}) - scaling triggered`
+          :`Top forecast: ${topSvc} (${topVal})`,
+        fill:spikes.length>0
+          ?'linear-gradient(to right,var(--coral),#ff7a7a)'
+          :'linear-gradient(to right,var(--blue),var(--cyan))',
+      });
+    }else if(d.error){
+      document.querySelector('.lpred .crow span').textContent='status';
+      document.getElementById('lphead').textContent='Forecast status';
+      document.getElementById('lpred').textContent='Waiting for forecast data';
+      document.getElementById('lpct').textContent='â€”';
+      document.getElementById('lcf').style.width='0%';
+      document.getElementById('lpct').textContent='-';
+      document.getElementById('lcf').style.background='linear-gradient(to right,var(--blue),var(--cyan))';
+      document.getElementById('lpw').textContent='Waiting: '+d.error;
     }
-  }catch(e){}
+    return d;
+  }catch(e){
+    document.querySelector('.lpred .crow span').textContent='status';
+    document.getElementById('lphead').textContent='Forecast status';
+    document.getElementById('lpred').textContent='Backend unreachable';
+    document.getElementById('lpct').textContent='â€”';
+    document.getElementById('lcf').style.width='0%';
+    document.getElementById('lpct').textContent='-';
+    document.getElementById('lcf').style.background='linear-gradient(to right,var(--blue),var(--cyan))';
+    document.getElementById('lpw').textContent='Backend unreachable';
+    return null;
+  }
 }
+startForecastLoop();
 runForecast();
 
-// ── LSTM CYCLE ────────────────────────────────────────────────
-const SEQS=[
-  {seq:['auth','user-profile','recommend'],pred:'user-profile',conf:94},
-  {seq:['order','payment','notification'], pred:'user-profile',conf:100},
-  {seq:['user-profile','recommend','auth'],pred:'recommend',   conf:87},
-  {seq:['payment','order','payment'],      pred:'notification', conf:91},
-];
-let si=0;
-function cycleSeq(){
-  const s=SEQS[si];
-  ['ls0','ls1','ls2'].forEach((id,i)=>{const el=document.getElementById(id);el.textContent=s.seq[i];el.classList.remove('on')});
-  setTimeout(()=>{
-    ['ls0','ls1','ls2'].forEach((id,i)=>setTimeout(()=>document.getElementById(id).classList.add('on'),i*260));
-    setTimeout(()=>{document.getElementById('lpred').textContent=s.pred;document.getElementById('lpct').textContent=s.conf+'%';document.getElementById('lcf').style.width=s.conf+'%';document.getElementById('lpw').textContent='⚡ Pre-warming '+s.pred},880);
-    si=(si+1)%SEQS.length;setTimeout(cycleSeq,3600);
-  },180);
-}cycleSeq();
 
 // ── AUTO-START SIMULATION ─────────────────────────────────────
 fetch(`${API}/simulate/start`,{method:'POST'}).catch(()=>{});
 
 // ── BUTTONS ───────────────────────────────────────────────────
-async function triggerSpike(){try{await fetch(`${API}/simulate?n=300`,{method:'POST'})}catch(e){}}
-async function scaleDown(){try{await fetch(`${API}/scale/down`,{method:'POST'})}catch(e){}}
+let spikeBusy=false;
+let scaleDownBusy=false;
+
+async function triggerSpike(){
+  if(spikeBusy)return;
+  spikeBusy=true;
+  const btn=document.querySelector('.gbtn-spike');
+  if(btn)btn.disabled=true;
+  try{
+    startForecastLoop();
+    for(let i=0;i<3;i++){
+      setStatus(`Triggering spike burst ${i+1}/3...`);
+      const resp=await fetch(`${API}/simulate?n=1000`,{method:'POST'});
+      if(!resp.ok)throw new Error(`simulate burst ${i+1} failed`);
+    }
+    setStatus('Retraining forecaster...');
+    const trainResp=await fetch(`${API}/train`,{method:'POST'});
+    if(!trainResp.ok)throw new Error('train failed');
+    setStatus('Running forecast...');
+    const d=await runForecast();
+    if(!d)throw new Error('forecast failed');
+    const spikes=d.spike_services||[];
+    setStatus(spikes.length>0?`Scaled ${spikes.join(', ')}`:'Spike generated - no scale-up detected');
+  }catch(e){
+    setStatus('Trigger spike failed: '+e.message);
+  }finally{
+    spikeBusy=false;
+    if(btn)btn.disabled=false;
+  }
+}
+async function scaleDown(){
+  if(scaleDownBusy)return;
+  scaleDownBusy=true;
+  const btn=document.querySelector('.gbtn-down');
+  if(btn)btn.disabled=true;
+  try{
+    setStatus('Stopping spike...');
+    await fetch(`${API}/simulate/stop`,{method:'POST'}).catch(()=>{});
+    stopForecastLoop();
+    const downResp=await fetch(`${API}/scale/down`,{method:'POST'});
+    if(!downResp.ok)throw new Error('scale down failed');
+    const purgeResp=await fetch(`${API}/scale/purge`,{method:'POST'});
+    if(!purgeResp.ok)throw new Error('purge failed');
+    const inst=await(await fetch(`${API}/instances`)).json();
+    renderInstances(inst);
+    renderForecastCard({
+      title:'Forecast status',
+      main:'No spike detected',
+      status:'PAUSED',
+      width:'0%',
+      detail:'Forecast paused after scale down',
+      fill:'linear-gradient(to right,var(--blue),var(--cyan))',
+    });
+    setStatus('Spike stopped and extra containers cleared');
+  }catch(e){
+    setStatus('Scale down failed: '+e.message);
+  }finally{
+    scaleDownBusy=false;
+    if(btn)btn.disabled=false;
+  }
+}
 </script>
 </body>
 </html>
