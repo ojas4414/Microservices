@@ -269,6 +269,4 @@ Kubernetes HPA is production-correct. Docker Compose + Python Docker SDK demonst
 **Q: Why MSELoss instead of CrossEntropyLoss?**
 Old LSTM classified next service (categorical → long tensor → CrossEntropy). New LSTM predicts call counts (continuous → float tensor → MSE). Regression, not classification.
 
----
 
-*Built from scratch — every line written manually, architecture decisions made by understanding the problem.*
