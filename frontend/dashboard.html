@@ -634,7 +634,7 @@ function connectWS(){
     if(!seenIds.has(key)){seenIds.add(key);addFeed(d);}
     if(d.cache==='miss')totCost+=d.simulated_cost||0;
     if(d.cache==='hit')totSaved+=.000002*50;
-    document.getElementById('ct').textContent='$'+totCost.toFixed(4);
+    document.getElementById('ct').textContent='$'+(totCost+totSaved).toFixed(4);
     document.getElementById('cs').textContent='$'+totSaved.toFixed(4);
     const toId=SVC_TO_NODE[d.to_service];
     const edge=toId?EDGES.find(ed=>ed.t===toId):null;
@@ -687,7 +687,7 @@ async function pollStats(){
     document.getElementById('cs').textContent='$'+totSaved.toFixed(4);
     document.getElementById('ss-hr').textContent=(d.hit_rate||0)+'%';
     document.getElementById('ss-lat').textContent=(d.avg_latency||0)+'ms';
-    document.getElementById('ss-cost').textContent='$'+(d.total_cost||0).toFixed(4);
+    document.getElementById('ss-cost').textContent='$'+((d.total_cost||0)+(totSaved||0)).toFixed(4);
     document.getElementById('ss-pw').textContent=(d.pre_warms||0);
   }catch(e){}
   setTimeout(pollStats,3000);
