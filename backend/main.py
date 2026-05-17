@@ -1,4 +1,6 @@
-from backend.lstm import train, predict
+from backend.forecaster import train, predict, needs_scaling
+from backend.scale import scaling, scale_down, scale_down_all, get_active
+from backend.database import init_db, insert_call, snapshot_window, get_last_windows
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -22,7 +24,7 @@ import os
 _REDIS_HOST = os.environ.get("REDIS_HOST", "127.0.0.1")
 cache = redis.Redis(host=_REDIS_HOST, port=6379, db=0)
 app = FastAPI()
-lstm_model = None
+forecaster_model = None
 
 app.add_middleware(
     CORSMiddleware,
@@ -40,30 +42,31 @@ class Callrequest(BaseModel):
     latency_ms: float
 
 
-def Sql():
-    conn = sqlite3.connect("nexusguard.db")
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS call_logs(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            from_service TEXT,
-            to_service TEXT,
-            timestamp REAL,
-            latency_ms REAL,
-            simulated_cost REAL
-        )
-    """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS pre_baked_logs(
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            service TEXT,
-            confidence REAL,
-            timestamp REAL
-        )
-    """)
-    conn.commit()
-    conn.close()
-Sql()
+init_db()
+
+import threading
+
+def bg_forecaster_loop():
+    global forecaster_model
+    time.sleep(3)
+    while True:
+        try:
+            forecaster_model = train()
+        except Exception as e:
+            print(f"[forecaster] train error: {e}")
+        time.sleep(20)
+
+def bg_window_loop():
+    while True:
+        window_start = time.time()
+        time.sleep(5)
+        try:
+            snapshot_window(window_start)
+        except Exception as e:
+            print(f"[snapshot] error: {e}")
+
+threading.Thread(target=bg_forecaster_loop, daemon=True).start()
+threading.Thread(target=bg_window_loop, daemon=True).start()
 
 
 @app.websocket("/ws/calls")
@@ -107,20 +110,28 @@ async def Call_request(request: Callrequest):
             "id": result.get("id"),
             "timestamp": time.time(),
         }))
+        conn = sqlite3.connect("nexusguard.db")
+        cursor = conn.cursor()
+        cursor.execute(
+            "INSERT INTO call_logs (from_service, to_service, timestamp, latency_ms, simulated_cost, cache_status) VALUES (?,?,?,?,?,?)",
+            (request.from_service, request.to_service, time.time(), request.latency_ms, 0.0, 'hit')
+        )
+        conn.commit()
+        conn.close()
         return result
 
     conn = sqlite3.connect("nexusguard.db")
     cursor = conn.cursor()
     simulated_cost = request.latency_ms * 0.000002
     cursor.execute(
-        "INSERT INTO call_logs (from_service, to_service, timestamp, latency_ms, simulated_cost) VALUES (?,?,?,?,?)",
-        (request.from_service, request.to_service, time.time(), request.latency_ms, simulated_cost),
+        "INSERT INTO call_logs (from_service, to_service, timestamp, latency_ms, simulated_cost, cache_status) VALUES (?,?,?,?,?,?)",
+        (request.from_service, request.to_service, time.time(), request.latency_ms, simulated_cost, 'miss'),
     )
     conn.commit()
     new_id = cursor.lastrowid
     conn.close()
     result = {"status": "logged", "id": new_id, "cache": "miss"}
-    cache.setex(cache_key, 300, json.dumps(result))
+    cache.setex(cache_key, 15, json.dumps(result))
     asyncio.create_task(broadcast_call({
         "from_service": request.from_service,
         "to_service": request.to_service,
@@ -142,7 +153,7 @@ def logs():
     conn.close()
     return [{
         "id": row[0], "from_service": row[1], "to_service": row[2],
-        "timestamp": row[3], "latency_ms": row[4], "simulated_cost": row[5],
+        "timestamp": row[3], "latency_ms": row[4], "simulated_cost": row[5], "cache": row[6] if len(row) > 6 else "miss"
     } for row in rows]
 
 
@@ -225,32 +236,32 @@ def check_service_health(service: str):
         return {"status": "offline"}
 
 
-# Generate 100 unique, realistic service call chains for simulation
-_SERVICES = ["auth", "user-profile", "recommend", "order", "payment", "notification"]
+# Semi-structured workflows so the LSTM can learn patterns, but varied enough for cache simulation.
+CALL_CHAINS = [
+    # Standard Login & Checkout
+    [("auth", "user-profile"), ("user-profile", "order"), ("order", "payment")],
+    [("auth", "order"), ("order", "payment"), ("payment", "notification")],
+    # Content Browsing
+    [("auth", "user-profile"), ("user-profile", "recommend"), ("recommend", "notification")],
+    [("auth", "recommend"), ("recommend", "user-profile"), ("user-profile", "notification")],
+    # Admin / Background
+    [("order", "notification"), ("notification", "user-profile")],
+    [("user-profile", "payment"), ("payment", "recommend")],
+] * 2  # duplicate array to avoid modifying single array logic
 
-def _generate_chains(count=100):
-    chains = []
-    while len(chains) < count:
-        # Create a path of 4 services (3 hops)
-        path = [random.choice(_SERVICES)]
-        for _ in range(3):
-            # Ensure the next service is different from the current one
-            next_svc = random.choice([s for s in _SERVICES if s != path[-1]])
-            path.append(next_svc)
-        
-        # Convert path to list of (from, to) tuples
-        chain = [(path[0], path[1]), (path[1], path[2]), (path[2], path[3])]
-        if chain not in chains:
-            chains.append(chain)
-    return chains
+def _is_prewarmed(cursor, to_svc):
+    cursor.execute("SELECT timestamp FROM pre_baked_logs WHERE service=? ORDER BY timestamp DESC LIMIT 1", (to_svc,))
+    row = cursor.fetchone()
+    # Consider it pre-warmed if the prediction happened within the last 6 seconds
+    if row and time.time() - row[0] < 6.0:
+        return True
+    return False
 
-CALL_CHAINS = _generate_chains(100)
-
-def _insert_call(cursor, from_svc, to_svc, latency_ms):
-    cost = latency_ms * 0.000002
+def _insert_call(cursor, from_svc, to_svc, latency_ms, cache_status='miss'):
+    cost = latency_ms * 0.000002 if cache_status == 'miss' else 0.0
     cursor.execute(
-        "INSERT INTO call_logs (from_service, to_service, timestamp, latency_ms, simulated_cost) VALUES (?,?,?,?,?)",
-        (from_svc, to_svc, time.time(), latency_ms, cost),
+        "INSERT INTO call_logs (from_service, to_service, timestamp, latency_ms, simulated_cost, cache_status) VALUES (?,?,?,?,?,?)",
+        (from_svc, to_svc, time.time(), latency_ms, cost, cache_status),
     )
 
 @app.post("/seed")
@@ -274,34 +285,50 @@ def seed_data():
 @app.post("/simulate")
 async def simulate_traffic(n: int = 20):
     """Generate n random realistic service calls right now, broadcast each via WS."""
-    conn = sqlite3.connect("nexusguard.db")
-    cursor = conn.cursor()
     inserted = 0
     for _ in range(n):
         chain = random.choice(CALL_CHAINS)
         from_svc, to_svc = random.choice(chain)
         latency = random.uniform(35, 300)
-        _insert_call(cursor, from_svc, to_svc, latency)
-        new_id = cursor.lastrowid
-        conn.commit()
-        simulated_cost = latency * 0.000002
         cache_key = f"{from_svc}:{to_svc}"
+        
+        conn = sqlite3.connect("nexusguard.db")
+        cursor = conn.cursor()
+        
         hit = cache.exists(cache_key)
+        is_pw = not hit and _is_prewarmed(cursor, to_svc)
+        
         if hit:
             cache.incr("nexusguard:cache_hits")
-        cache.setex(cache_key, 300, json.dumps({"id": new_id}))
+            c_status = "hit"
+            latency = random.uniform(2, 5) # cache hit latency
+            simulated_cost = 0.0
+        elif is_pw:
+            c_status = "prewarmed"
+            latency = random.uniform(8, 25) # pre-warmed latency
+            simulated_cost = latency * 0.000002
+        else:
+            c_status = "miss"
+            simulated_cost = latency * 0.000002
+            
+        cache.setex(cache_key, 15, json.dumps({"id": 0})) # Fake id just to have value
+        
+        _insert_call(cursor, from_svc, to_svc, latency, cache_status=c_status)
+        new_id = cursor.lastrowid
+        conn.commit()
+        conn.close()
+        
         asyncio.create_task(broadcast_call({
             "from_service": from_svc,
             "to_service":   to_svc,
             "latency_ms":   round(latency, 1),
             "simulated_cost": round(simulated_cost, 6),
-            "cache": "hit" if hit else "miss",
+            "cache": c_status,
             "id": new_id,
             "timestamp": time.time(),
         }))
         inserted += 1
         await asyncio.sleep(0.05)  # small gap so WS clients get individual events
-    conn.close()
     return {"status": "simulated", "calls": inserted}
 
 
@@ -315,24 +342,40 @@ async def _bg_simulate():
             chain = random.choice(CALL_CHAINS)
             from_svc, to_svc = random.choice(chain)
             latency = random.uniform(35, 300)
+            cache_key = f"{from_svc}:{to_svc}"
+            
             conn = sqlite3.connect("nexusguard.db")
             cursor = conn.cursor()
-            _insert_call(cursor, from_svc, to_svc, latency)
+            
+            hit = cache.exists(cache_key)
+            is_pw = not hit and _is_prewarmed(cursor, to_svc)
+            
+            if hit:
+                cache.incr("nexusguard:cache_hits")
+                c_status = "hit"
+                latency = random.uniform(2, 5)
+                simulated_cost = 0.0
+            elif is_pw:
+                c_status = "prewarmed"
+                latency = random.uniform(8, 25)
+                simulated_cost = latency * 0.000002
+            else:
+                c_status = "miss"
+                simulated_cost = latency * 0.000002
+
+            cache.setex(cache_key, 15, json.dumps({"id": 0}))
+            
+            _insert_call(cursor, from_svc, to_svc, latency, cache_status=c_status)
             conn.commit()
             new_id = cursor.lastrowid
             conn.close()
-            simulated_cost = latency * 0.000002
-            cache_key = f"{from_svc}:{to_svc}"
-            hit = cache.exists(cache_key)
-            if hit:
-                cache.incr("nexusguard:cache_hits")
-            cache.setex(cache_key, 300, json.dumps({"id": new_id}))
+            
             await broadcast_call({
                 "from_service": from_svc,
                 "to_service":   to_svc,
                 "latency_ms":   round(latency, 1),
                 "simulated_cost": round(simulated_cost, 6),
-                "cache": "hit" if hit else "miss",
+                "cache": c_status,
                 "id": new_id,
                 "timestamp": time.time(),
             })
@@ -358,45 +401,39 @@ async def stop_simulation():
     return {"status": "not_running"}
 
 
+@app.post("/scale/down")
+def scale_down_endpoint():
+    killed = scale_down_all()
+    return {"status": "scaled_down", "killed": killed}
+
+
 @app.post("/train")
 def training():
-    global lstm_model
-    lstm_model = train()
+    global forecaster_model
+    forecaster_model = train()
     return {"status": "trained"}
 
 
-@app.post("/predict")
-def predicting():
-    conn = sqlite3.connect("nexusguard.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT to_service FROM call_logs ORDER BY timestamp DESC LIMIT 3")
-    rows = cursor.fetchall()
-    conn.close()
+@app.get("/instances")
+def instances():
+    return get_active()
 
-    three = [row[0] for row in reversed(rows)]
-    predicted, confidence = predict(lstm_model, three)
-    pre_baked = False
 
-    if confidence > 0.8 and predicted:
-        conn = sqlite3.connect("nexusguard.db")
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO pre_baked_logs (service, confidence, timestamp) VALUES (?,?,?)",
-            (predicted, confidence, time.time()),
-        )
-        conn.commit()
-        conn.close()
-        url = SERVICE_URLS.get(predicted)
-        if url:
-            try:
-                httpx.get(url, timeout=2.0)
-                pre_baked = True
-            except Exception:
-                pre_baked = False
-
+@app.post("/forecast")
+def forecast():
+    global forecaster_model
+    windows = get_last_windows(12)
+    if len(windows) < 12:
+        return {"error": "not enough data yet", "windows": len(windows)}
+    predictions = predict(forecaster_model, windows)
+    spike_services = needs_scaling(predictions)
+    scaled = {}
+    for svc in spike_services:
+        ports = scaling(svc, 2)
+        scaled[svc] = ports
     return {
-        "last_three": three,
-        "predicted_next": predicted,
-        "confidence": confidence,
-        "pre_warmed": pre_baked,
+        "predictions": predictions,
+        "spike_services": spike_services,
+        "scaled_up": scaled,
+        "instances": get_active(),
     }

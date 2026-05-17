@@ -3,772 +3,738 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>NexusGuard — Dashboard</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;700&family=DM+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<title>NexusGuard — Control Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Exo+2:wght@300;400;500&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg: #030710; --surface: #0d1117; --surface2: #111827;
-  --border: #1e2d3d; --text: #e2e8f0; --muted: #64748b;
-  --cyan: #22d3ee; --green: #34d399; --red: #f87171;
-  --amber: #fbbf24; --purple: #a78bfa; --blue: #60a5fa;
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --bg:#020810;
+  --cyan:#00ffe7;--cyan2:rgba(0,255,231,.12);
+  --blue:#0066ff;--violet:#8b5cf6;--emerald:#00ff88;--coral:#ff4444;--amber:#ffaa00;
+  --glass:rgba(255,255,255,.04);
+  --border:rgba(0,255,231,.15);--border2:rgba(0,255,231,.35);
+  --text:#e0f4ff;--text2:#6a8aaa;--text3:#1a3050;
+  --mono:'JetBrains Mono',monospace;--display:'Orbitron',sans-serif;--body:'Exo 2',sans-serif;
 }
-* { margin:0; padding:0; box-sizing:border-box; }
-html, body { height:100%; overflow:hidden; }
-body {
-  background: var(--bg); color: var(--text);
-  font-family: 'DM Sans', sans-serif; font-size:13px;
-  display:flex; flex-direction:column;
+html,body{width:100%;height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--body)}
+
+#bg-canvas{position:fixed;inset:0;z-index:0;width:100%;height:100%}
+.bg-overlay{position:fixed;inset:0;z-index:1;
+  background:radial-gradient(ellipse 80% 50% at 20% 20%,rgba(0,102,255,.08) 0%,transparent 60%),
+             radial-gradient(ellipse 60% 40% at 80% 80%,rgba(0,255,231,.06) 0%,transparent 60%),
+             radial-gradient(ellipse 40% 60% at 50% 50%,rgba(139,92,246,.04) 0%,transparent 70%);
+}
+.scan-line{position:fixed;inset:0;z-index:2;pointer-events:none;
+  background:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,255,231,.012) 2px,rgba(0,255,231,.012) 4px);
 }
 
-/* MOBILE WARNING */
-.mobile-warn {
-  display:none; position:fixed; inset:0; z-index:999;
-  background:var(--bg); align-items:center; justify-content:center;
-  flex-direction:column; gap:16px; text-align:center; padding:32px;
-}
-.mobile-warn p { color:var(--muted); font-size:14px; }
-.mobile-warn a { color:var(--cyan); text-decoration:none; }
-
-/* NAV */
-nav {
-  display:flex; align-items:center; justify-content:space-between;
-  padding:0 16px; height:44px; flex-shrink:0;
-  background:var(--bg); border-bottom:0.5px solid var(--border);
-}
-.nav-logo { display:flex; align-items:center; gap:8px; }
-.logo-hex  { color:var(--cyan); font-size:16px; font-weight:700; font-family:'JetBrains Mono',monospace; }
-.logo-name { font-size:13px; font-weight:600; }
-.logo-tag  { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); border:0.5px solid var(--border); padding:1px 5px; border-radius:3px; }
-.nav-right { display:flex; align-items:center; gap:16px; }
-.nav-back  { color:var(--muted); text-decoration:none; font-size:12px; font-family:'JetBrains Mono',monospace; transition:color 0.2s; }
-.nav-back:hover { color:var(--text); }
-.conn-status {
-  display:flex; align-items:center; gap:6px;
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-}
-.conn-dot { width:6px; height:6px; border-radius:50%; background:var(--muted); }
-.conn-dot.live    { background:var(--green); animation:pulse-dot 1.5s infinite; }
-.conn-dot.offline { background:var(--red); }
-@keyframes pulse-dot { 0%,100%{opacity:1;transform:scale(1)} 50%{opacity:0.4;transform:scale(0.8)} }
-
-/* MAIN GRID */
-.grid {
-  flex:1; display:grid;
-  grid-template-columns: 300px 1fr 300px;
-  gap:8px; padding:8px; overflow:hidden; min-height:0;
+#app{position:relative;z-index:10;width:100vw;height:100vh;display:grid;
+  grid-template-rows:52px 1fr;overflow:hidden;
 }
 
-/* PANEL BASE */
-.panel {
-  background:var(--surface); border:0.5px solid var(--border);
-  border-radius:6px; display:flex; flex-direction:column; overflow:hidden;
+/* HEADER */
+header{display:flex;align-items:center;justify-content:space-between;padding:0 20px;
+  background:rgba(2,8,16,.8);backdrop-filter:blur(20px);border-bottom:1px solid var(--border);z-index:20;
 }
-.panel-hdr {
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-  color:var(--muted); letter-spacing:0.12em;
-  padding:10px 12px; border-bottom:0.5px solid var(--border);
-  flex-shrink:0; display:flex; align-items:center; justify-content:space-between;
+.h-logo{font-family:var(--display);font-size:15px;font-weight:900;color:var(--cyan);
+  letter-spacing:.2em;text-shadow:0 0 20px rgba(0,255,231,.5);display:flex;align-items:center;gap:10px;
 }
-.panel-hdr-badge {
-  font-size:9px; padding:1px 6px; border-radius:2px;
-  font-family:'JetBrains Mono',monospace;
-}
-.badge-green { background:#34d39922; color:var(--green); }
-.badge-amber { background:#fbbf2422; color:var(--amber); }
+.h-logo-icon{font-size:19px;animation:spin3d 4s linear infinite;display:inline-block}
+@keyframes spin3d{0%{transform:rotateY(0)}100%{transform:rotateY(360deg)}}
+.h-stats{display:flex;gap:16px;align-items:center}
+.h-s{font-family:var(--mono);font-size:12px;color:var(--text2);display:flex;align-items:center;gap:5px}
+.h-sv{color:var(--cyan);font-weight:500}
+.h-dot{width:5px;height:5px;border-radius:50%;background:var(--emerald);animation:blink 1.8s ease infinite}
+@keyframes blink{0%,100%{opacity:1;box-shadow:0 0 6px var(--emerald)}50%{opacity:.3}}
+.h-time{font-family:var(--mono);font-size:12px;color:var(--text2)}
 
-/* LEFT — CALL FEED */
-.feed-body { flex:1; overflow-y:auto; overflow-x:hidden; }
-.feed-body::-webkit-scrollbar { width:3px; }
-.feed-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
-.feed-entry {
-  display:grid; grid-template-columns: auto 14px auto 1fr auto 52px;
-  align-items:center; gap:6px;
-  padding:6px 10px; border-bottom:0.5px solid var(--border);
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-  animation:slideIn 0.25s ease;
-}
-@keyframes slideIn { from{transform:translateY(-16px);opacity:0} to{transform:translateY(0);opacity:1} }
-.feed-entry.hit  { background:#34d39908; }
-.feed-entry.miss { background:#f8717108; }
-.fe-from { color:var(--cyan); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.fe-arr  { color:var(--muted); }
-.fe-to   { color:var(--text); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.fe-lat  { color:var(--muted); text-align:right; }
-.fe-badge {
-  font-size:9px; padding:1px 5px; border-radius:2px;
-  text-align:center; font-weight:500;
-}
-.fe-badge.hit  { background:#34d39922; color:var(--green); }
-.fe-badge.miss { background:#f8717122; color:var(--red); }
-.feed-empty {
-  display:flex; align-items:center; justify-content:center;
-  height:100%; color:var(--muted);
-  font-family:'JetBrains Mono',monospace; font-size:11px;
-}
+/* MAIN */
+main{display:grid;grid-template-columns:300px 1fr 260px;grid-template-rows:1fr 170px;gap:1px;background:var(--border);overflow:hidden}
+.panel{background:rgba(2,8,16,.88);backdrop-filter:blur(24px);overflow:hidden;position:relative}
+.p-head{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;border-bottom:1px solid var(--border);background:rgba(0,255,231,.025)}
+.p-title{font-family:var(--display);font-size:10px;letter-spacing:.2em;color:var(--cyan);text-transform:uppercase;display:flex;align-items:center;gap:7px}
+.p-title::before{content:'';width:5px;height:5px;border:1px solid var(--cyan);transform:rotate(45deg);display:inline-block;box-shadow:0 0 5px rgba(0,255,231,.4)}
 
-/* CENTER — GRAPH */
-.graph-panel { position:relative; }
-.graph-canvas-wrap { flex:1; position:relative; overflow:hidden; }
-#dash-graph { width:100%; height:100%; display:block; }
-.edge-popup {
-  position:absolute; z-index:10;
-  background:var(--surface2); border:0.5px solid var(--border);
-  border-radius:5px; padding:8px 12px;
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-  pointer-events:none; display:none; min-width:150px;
-}
-.popup-route { color:var(--cyan); margin-bottom:5px; font-weight:600; }
-.popup-stat  { color:var(--muted); margin-bottom:2px; }
-.popup-stat span { color:var(--text); }
-.graph-legend-row {
-  display:flex; gap:14px; padding:8px 12px;
-  border-top:0.5px solid var(--border); flex-shrink:0;
-}
-.leg { display:flex; align-items:center; gap:4px; font-family:'JetBrains Mono',monospace; font-size:9px; }
-.leg.cached  { color:var(--green); }
-.leg.live    { color:var(--blue);  }
-.leg.prewarm { color:var(--amber); }
-.leg.spike   { color:var(--red);   }
+/* LEFT */
+#panel-left{grid-column:1;grid-row:1/3;display:flex;flex-direction:column;gap:1px;background:var(--border)}
 
-/* RIGHT — 3 stacked panels */
-.right-col { display:flex; flex-direction:column; gap:8px; overflow:hidden; }
-.right-panel {
-  background:var(--surface); border:0.5px solid var(--border);
-  border-radius:6px; flex:1; display:flex; flex-direction:column; overflow:hidden;
-  min-height:0;
-}
-.right-body { flex:1; overflow-y:auto; padding:12px; }
-.right-body::-webkit-scrollbar { width:3px; }
-.right-body::-webkit-scrollbar-thumb { background:var(--border); border-radius:2px; }
+.lstm-box{background:rgba(2,8,16,.92);padding:0}
+.lstm-inner{padding:12px 14px}
+.box-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--text2);text-transform:uppercase;margin-bottom:8px}
+.lseq-wrap{display:flex;align-items:center;gap:4px;margin-bottom:10px;flex-wrap:wrap}
+.lseq{font-family:var(--mono);font-size:10px;padding:3px 8px;border-radius:2px;border:1px solid rgba(0,255,231,.18);color:var(--text2);background:rgba(0,255,231,.03);transition:all .45s}
+.lseq.on{background:rgba(139,92,246,.18);border-color:var(--violet);color:var(--violet);box-shadow:0 0 10px rgba(139,92,246,.25)}
+.larr{color:var(--text3);font-size:11px}
+.ldiv{font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:.1em;text-align:center;margin:7px 0;display:flex;align-items:center;gap:5px}
+.ldiv::before,.ldiv::after{content:'';flex:1;height:1px;background:linear-gradient(to right,transparent,var(--border),transparent)}
+.lpred{background:rgba(0,255,231,.04);border:1px solid rgba(0,255,231,.18);border-radius:3px;padding:10px}
+.lp-lbl{font-size:9px;font-family:var(--mono);letter-spacing:.1em;color:var(--text2);text-transform:uppercase;margin-bottom:2px}
+.lp-svc{font-family:var(--display);font-size:19px;font-weight:700;color:var(--cyan);margin-bottom:7px;text-shadow:0 0 15px rgba(0,255,231,.35)}
+.crow{display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text2)}
+.ctrack{flex:1;height:2px;background:rgba(0,255,231,.08);border-radius:1px;overflow:hidden}
+.cfill{height:100%;background:linear-gradient(to right,var(--blue),var(--cyan));border-radius:1px;transition:width 1.2s ease}
+.pwarm{font-family:var(--mono);font-size:10px;color:var(--emerald);margin-top:6px;display:flex;align-items:center;gap:4px}
 
-/* LSTM panel */
-.seq-row-d { display:flex; align-items:center; gap:6px; margin-bottom:14px; flex-wrap:wrap; }
-.seq-svc-d {
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-  color:var(--cyan); background:#22d3ee10; border:0.5px solid #22d3ee33;
-  border-radius:3px; padding:4px 8px;
-}
-.seq-arr-d { color:var(--muted); font-size:13px; }
-.pred-lbl { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:0.1em; margin-bottom:4px; }
-.pred-svc-d {
-  font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700;
-  color:var(--green); margin-bottom:8px; display:flex; align-items:center; gap:8px;
-}
-.prewarm-d { font-size:9px; color:var(--amber); border:0.5px solid var(--amber); padding:1px 6px; border-radius:2px; display:none; }
-.conf-row-d { display:flex; align-items:center; gap:8px; }
-.conf-bar-d { flex:1; height:3px; background:var(--border); border-radius:2px; overflow:hidden; }
-.conf-fill-d { height:100%; background:var(--cyan); border-radius:2px; width:0%; transition:width 0.6s cubic-bezier(0.4,0,0.2,1); }
-.conf-pct-d { font-family:'JetBrains Mono',monospace; font-size:11px; color:var(--cyan); min-width:32px; }
+.inst-box{flex:1;background:rgba(2,8,16,.92);overflow:hidden;display:flex;flex-direction:column}
+.inst-inner{padding:10px 14px;flex:1;overflow-y:auto}
+.inst-row{display:flex;align-items:center;justify-content:space-between;padding:7px 9px;margin-bottom:3px;
+  background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:2px;transition:all .4s}
+.inst-row.scaling{background:rgba(0,255,231,.05);border-color:var(--cyan);box-shadow:0 0 10px rgba(0,255,231,.12)}
+.inst-name{font-family:var(--mono);font-size:11px;color:var(--text)}
+.inst-right{display:flex;align-items:center;gap:5px}
+.inst-num{font-family:var(--display);font-size:15px;font-weight:700;color:var(--cyan)}
+.inst-base{font-family:var(--mono);font-size:9px;color:var(--text2)}
+.inst-extra{font-family:var(--mono);font-size:9px;padding:1px 5px;border-radius:2px;background:rgba(0,255,136,.12);color:var(--emerald);border:1px solid rgba(0,255,136,.25)}
 
-/* COST INTEL panel */
-.cost-grid { display:flex; flex-direction:column; gap:10px; }
-.cost-row-d { display:flex; flex-direction:column; padding-bottom:10px; border-bottom:0.5px solid var(--border); }
-.cost-row-d:last-child { border:none; padding:0; }
-.cost-k { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); letter-spacing:0.1em; margin-bottom:3px; }
-.cost-v { font-family:'JetBrains Mono',monospace; font-size:16px; font-weight:700; color:var(--amber); }
-.cost-v.sm { font-size:13px; color:var(--text); }
-.cost-v.green { color:var(--green); }
+/* CENTER GRAPH */
+#panel-center{grid-column:2;grid-row:1;background:rgba(2,8,16,.75);position:relative}
+#gc{width:100%;height:100%;display:block}
+.graph-btns{position:absolute;bottom:12px;left:12px;display:flex;gap:8px}
+.gbtn{font-family:var(--display);font-size:9px;letter-spacing:.14em;text-transform:uppercase;padding:6px 14px;border-radius:2px;cursor:pointer;border:none;transition:all .2s}
+.gbtn-spike{background:rgba(255,68,68,.15);border:1px solid rgba(255,68,68,.4);color:var(--coral)}
+.gbtn-spike:hover{background:rgba(255,68,68,.25);box-shadow:0 0 16px rgba(255,68,68,.25)}
+.gbtn-down{background:rgba(0,255,231,.08);border:1px solid var(--border);color:var(--cyan)}
+.gbtn-down:hover{background:rgba(0,255,231,.15);box-shadow:0 0 16px rgba(0,255,231,.15)}
+.graph-leg{position:absolute;top:10px;right:10px;display:flex;flex-direction:column;gap:4px}
+.gl{display:flex;align-items:center;gap:5px;font-family:var(--mono);font-size:10px;color:var(--text2)}
+.gld{width:6px;height:6px;border-radius:50%}
+.graph-hint{position:absolute;top:10px;left:12px;font-family:var(--mono);font-size:10px;color:var(--text3);letter-spacing:.06em}
 
-/* HEALTH panel */
-.health-list { display:flex; flex-direction:column; gap:6px; }
-.svc-row {
-  display:flex; align-items:center; gap:8px;
-  padding:6px 0; border-bottom:0.5px solid var(--border);
+/* NODE POPUP */
+.node-popup{position:absolute;background:rgba(2,8,16,.96);border:1px solid var(--border2);border-radius:4px;
+  padding:0;width:220px;z-index:100;display:none;backdrop-filter:blur(30px);
+  box-shadow:0 0 30px rgba(0,255,231,.1),0 0 80px rgba(0,255,231,.04);
 }
-.svc-row:last-child { border:none; }
-.svc-dot {
-  width:7px; height:7px; border-radius:50%; flex-shrink:0;
-  background:var(--muted);
+.np-head{padding:12px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.np-name{font-family:var(--display);font-size:13px;font-weight:700;letter-spacing:.08em}
+.np-close{font-size:16px;color:var(--text2);cursor:pointer;background:none;border:none;color:var(--text2);line-height:1}
+.np-close:hover{color:var(--cyan)}
+.np-stats{display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border)}
+.np-stat{background:rgba(255,255,255,.03);border-radius:3px;padding:8px;text-align:center}
+.np-val{font-family:var(--display);font-size:16px;font-weight:700;line-height:1;margin-bottom:2px}
+.np-lbl{font-size:9px;font-family:var(--mono);color:var(--text3);letter-spacing:.06em;text-transform:uppercase}
+.np-actions{padding:10px 14px;display:flex;flex-direction:column;gap:5px}
+.np-btn{font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;padding:6px 10px;
+  border-radius:2px;cursor:pointer;border:none;width:100%;text-align:left;transition:all .2s;
 }
-.svc-dot.healthy { background:var(--green); animation:pulse-dot 2s infinite; }
-.svc-dot.offline { background:var(--red); }
-.svc-name  { font-family:'JetBrains Mono',monospace; font-size:10px; color:var(--text); flex:1; }
-.svc-port  { font-family:'JetBrains Mono',monospace; font-size:9px; color:var(--muted); }
-.svc-state { font-family:'JetBrains Mono',monospace; font-size:9px; min-width:48px; text-align:right; }
-.svc-state.healthy { color:var(--green); }
-.svc-state.offline { color:var(--red); }
-.svc-state.checking { color:var(--muted); }
+.np-btn-up{background:rgba(0,255,136,.1);border:1px solid rgba(0,255,136,.25);color:var(--emerald)}
+.np-btn-up:hover{background:rgba(0,255,136,.2);box-shadow:0 0 12px rgba(0,255,136,.15)}
+.np-btn-flush{background:rgba(255,170,0,.1);border:1px solid rgba(255,170,0,.25);color:var(--amber)}
+.np-btn-flush:hover{background:rgba(255,170,0,.2)}
+.np-btn-health{background:rgba(0,102,255,.1);border:1px solid rgba(0,102,255,.3);color:var(--blue)}
+.np-btn-health:hover{background:rgba(0,102,255,.2)}
+.np-status{padding:6px 14px 12px;font-family:var(--mono);font-size:10px;color:var(--emerald);min-height:24px;border-top:1px solid var(--border)}
 
-/* METRICS BAR */
-.metrics-bar {
-  flex-shrink:0; height:40px;
-  display:flex; align-items:center;
-  background:var(--surface); border-top:0.5px solid var(--border);
-  padding:0 16px; gap:0; overflow:hidden;
+/* EDGE POPUP */
+.edge-popup{position:absolute;background:rgba(2,8,16,.96);border:1px solid var(--border2);border-radius:4px;
+  padding:14px;width:200px;z-index:90;display:none;backdrop-filter:blur(30px);
+  box-shadow:0 0 30px rgba(0,255,231,.08);
 }
-.metric {
-  display:flex; align-items:center; gap:8px;
-  padding:0 16px; border-right:0.5px solid var(--border);
-  font-family:'JetBrains Mono',monospace; font-size:10px;
-  color:var(--muted); white-space:nowrap;
-}
-.metric:first-child { padding-left:0; }
-.metric:last-child  { border:none; }
-.metric span { font-size:12px; font-weight:600; }
-.metric span.green  { color:var(--green); }
-.metric span.red    { color:var(--red); }
-.metric span.cyan   { color:var(--cyan); }
-.metric span.amber  { color:var(--amber); }
-.metric span.purple { color:var(--purple); }
+.ep-route{font-family:var(--mono);font-size:10px;color:var(--text2);margin-bottom:4px}
+.ep-badge{display:inline-block;font-family:var(--mono);font-size:9px;padding:2px 6px;border-radius:2px;margin-bottom:9px;letter-spacing:.08em}
+.ep-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px}
+.ep-stat{background:rgba(255,255,255,.03);border-radius:3px;padding:7px}
+.ep-val{font-family:var(--display);font-size:15px;font-weight:700;line-height:1;margin-bottom:2px}
+.ep-lbl{font-size:9px;color:var(--text3);letter-spacing:.04em}
+.ep-save{font-family:var(--mono);font-size:10px;color:var(--emerald)}
+
+/* RIGHT */
+#panel-right{grid-column:3;grid-row:1/3;display:flex;flex-direction:column;gap:1px;background:var(--border)}
+.stats-box{background:rgba(2,8,16,.92);padding:0}
+.stats-inner{padding:10px 14px}
+.stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.sc{background:rgba(255,255,255,.025);border:1px solid var(--border);border-radius:3px;padding:9px;text-align:center}
+.sc-val{font-family:var(--display);font-size:19px;font-weight:700;letter-spacing:-.02em;line-height:1;margin-bottom:2px}
+.sc-lbl{font-size:10px;font-family:var(--mono);color:var(--text2);letter-spacing:.04em}
+.feed-box{flex:1;background:rgba(2,8,16,.92);display:flex;flex-direction:column;overflow:hidden}
+.feed-inner{padding:8px 14px;flex:1;display:flex;flex-direction:column;overflow:hidden}
+.box-lbl2{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--text2);text-transform:uppercase;margin-bottom:8px}
+#live-feed{flex:1;overflow-y:auto;display:flex;flex-direction:column;gap:2px}
+#live-feed::-webkit-scrollbar{width:2px}
+#live-feed::-webkit-scrollbar-thumb{background:var(--border)}
+.fi{font-family:var(--mono);font-size:10px;padding:4px 7px;border-radius:2px;border-left:2px solid;
+  animation:fin .3s ease;display:flex;justify-content:space-between;align-items:center}
+@keyframes fin{from{opacity:0;transform:translateX(-6px)}to{opacity:1;transform:none}}
+.fi-hit{background:rgba(0,255,136,.04);border-color:var(--emerald);color:rgba(0,255,136,.75)}
+.fi-miss{background:rgba(0,102,255,.04);border-color:var(--blue);color:rgba(96,165,250,.75)}
+.fi-pre{background:rgba(255,170,0,.04);border-color:var(--amber);color:rgba(255,170,0,.75)}
+.fi-route{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.fi-b{font-size:8px;padding:1px 4px;border-radius:2px;margin-left:4px;flex-shrink:0;background:rgba(255,255,255,.06)}
+
+/* BOTTOM */
+#panel-bottom{grid-column:2;grid-row:2;display:flex;gap:1px;background:var(--border)}
+.cost-box{flex:1;background:rgba(2,8,16,.92);padding:12px 16px;display:flex;align-items:center;gap:20px}
+.cost-big{flex:0 0 auto}
+.cost-lbl{font-family:var(--mono);font-size:9px;letter-spacing:.14em;color:var(--text2);text-transform:uppercase;margin-bottom:3px}
+.cost-num{font-family:var(--display);font-size:44px;font-weight:900;color:var(--coral);letter-spacing:-.04em;line-height:1;text-shadow:0 0 25px rgba(255,68,68,.35)}
+.cost-saved{font-family:var(--display);font-size:32px;font-weight:700;color:var(--emerald);letter-spacing:-.03em;text-shadow:0 0 18px rgba(0,255,136,.25)}
+.cost-bars{flex:1;display:flex;flex-direction:column;gap:5px}
+.cbar{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px}
+.cbar-n{color:var(--text2);width:110px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cbar-t{flex:1;height:2px;background:rgba(255,255,255,.05);border-radius:1px;overflow:hidden}
+.cbar-f{height:100%;background:linear-gradient(to right,var(--coral),var(--amber));border-radius:1px;transition:width 1s ease}
+.cbar-v{color:var(--coral);width:32px;text-align:right;flex-shrink:0}
+.forecast-box{flex:0 0 240px;background:rgba(2,8,16,.92);padding:12px 14px}
+.fb-rows{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+.fb{display:flex;align-items:center;gap:7px;font-family:var(--mono);font-size:10px}
+.fb-n{color:var(--text2);width:75px;flex-shrink:0;overflow:hidden;text-overflow:ellipsis}
+.fb-t{flex:1;height:3px;background:rgba(255,255,255,.04);border-radius:2px;overflow:hidden}
+.fb-f{height:100%;border-radius:2px;transition:width 1s ease}
+.fb-v{color:var(--text);width:20px;text-align:right;flex-shrink:0;font-size:10px}
 </style>
 </head>
 <body>
+<canvas id="bg-canvas"></canvas>
+<div class="bg-overlay"></div>
+<div class="scan-line"></div>
 
-<!-- Mobile warning -->
-<div class="mobile-warn" id="mobile-warn">
-  <p style="font-size:20px;color:var(--text)">Dashboard requires a wider screen</p>
-  <p>Minimum 1200px. You're on a smaller viewport.</p>
-  <a href="index.html">← Back to Overview</a>
-</div>
-
-<!-- NAV -->
-<nav>
-  <div class="nav-logo">
-    <span class="logo-hex">⬡</span>
-    <span class="logo-name">NexusGuard</span>
-    <span class="logo-tag">DASHBOARD</span>
+<div id="app">
+<header>
+  <div class="h-logo"><span class="h-logo-icon">◈</span>NEXUSGUARD <span style="font-size:10px;color:var(--text2);letter-spacing:.1em;font-family:var(--mono)">CONTROL CENTER</span></div>
+  <div class="h-stats">
+    <div class="h-s"><div class="h-dot"></div><span class="h-sv" id="hh">0</span> hits</div>
+    <div class="h-s">rate <span class="h-sv" id="hr">0%</span></div>
+    <div class="h-s">calls <span class="h-sv" id="hc">0</span></div>
+    <div class="h-s">lat <span class="h-sv" id="hl">—</span></div>
+    <div class="h-time" id="htm">—</div>
   </div>
-  <div class="nav-right">
-    <div class="conn-status">
-      <div class="conn-dot" id="conn-dot"></div>
-      <span id="conn-label" style="font-family:'JetBrains Mono',monospace;font-size:10px;color:var(--muted)">CONNECTING</span>
-    </div>
-    <button id="sim-btn" onclick="toggleSim()" style="
-      background:transparent; border:0.5px solid var(--muted); color:var(--muted);
-      font-family:'JetBrains Mono',monospace; font-size:10px; padding:4px 12px;
-      border-radius:3px; cursor:pointer; transition:all 0.2s; letter-spacing:0.08em;
-    ">▶ SIMULATE</button>
-    <a href="index.html" class="nav-back">← Overview</a>
-  </div>
-</nav>
-
-<!-- MAIN 3-COLUMN GRID -->
-<div class="grid">
-
-  <!-- LEFT: LIVE CALL FEED -->
-  <div class="panel">
-    <div class="panel-hdr">
-      LIVE CALL FEED
-      <span class="panel-hdr-badge badge-green" id="feed-count">0 entries</span>
-    </div>
-    <div class="feed-body" id="feed-body">
-      <div class="feed-empty">Waiting for calls…</div>
-    </div>
-  </div>
-
-  <!-- CENTER: SERVICE GRAPH -->
-  <div class="panel graph-panel">
-    <div class="panel-hdr">SERVICE GRAPH</div>
-    <div class="graph-canvas-wrap">
-      <canvas id="dash-graph"></canvas>
-      <div class="edge-popup" id="edge-popup">
-        <div class="popup-route" id="popup-route"></div>
-        <div class="popup-stat">Calls: <span id="popup-calls"></span></div>
-        <div class="popup-stat">Cost: <span id="popup-cost"></span></div>
-        <div class="popup-stat">State: <span id="popup-state"></span></div>
-      </div>
-    </div>
-    <div class="graph-legend-row">
-      <span class="leg cached">● CACHED</span>
-      <span class="leg live">● LIVE</span>
-      <span class="leg prewarm">● PRE-WARMED</span>
-      <span class="leg spike">● SPIKE</span>
-    </div>
-  </div>
-
-  <!-- RIGHT: 3 STACKED PANELS -->
-  <div class="right-col">
-
-    <!-- LSTM -->
-    <div class="right-panel">
-      <div class="panel-hdr">LSTM PREDICTION</div>
-      <div class="right-body">
-        <div class="pred-lbl">LAST 3 CALLS</div>
-        <div class="seq-row-d">
-          <span class="seq-svc-d" id="d-seq0">—</span>
-          <span class="seq-arr-d">→</span>
-          <span class="seq-svc-d" id="d-seq1">—</span>
-          <span class="seq-arr-d">→</span>
-          <span class="seq-svc-d" id="d-seq2">—</span>
+</header>
+<main>
+  <!-- LEFT -->
+  <div id="panel-left">
+    <div class="lstm-box">
+      <div class="p-head"><div class="p-title">LSTM Volume Predictor</div></div>
+      <div class="lstm-inner">
+        <div class="box-lbl">Input sequence</div>
+        <div class="lseq-wrap">
+          <span class="lseq" id="ls0">—</span><span class="larr">→</span>
+          <span class="lseq" id="ls1">—</span><span class="larr">→</span>
+          <span class="lseq" id="ls2">—</span>
         </div>
-        <div class="pred-lbl">PREDICTED NEXT</div>
-        <div class="pred-svc-d">
-          <span id="d-pred-svc">—</span>
-          <span class="prewarm-d" id="d-prewarm">⚡ PRE-WARMED</span>
-        </div>
-        <div class="conf-row-d">
-          <div class="conf-bar-d"><div class="conf-fill-d" id="d-conf-fill"></div></div>
-          <div class="conf-pct-d" id="d-conf-pct">0%</div>
+        <div class="ldiv">Volume Forecaster</div>
+        <div class="lpred">
+          <div class="lp-lbl">Predicted spike</div>
+          <div class="lp-svc" id="lpred">Waiting...</div>
+          <div class="crow"><span>conf</span><div class="ctrack"><div class="cfill" id="lcf" style="width:0%"></div></div><span id="lpct">—</span></div>
+          <div class="pwarm" id="lpw">⚡ Monitoring patterns</div>
         </div>
       </div>
     </div>
-
-    <!-- COST INTEL -->
-    <div class="right-panel">
-      <div class="panel-hdr">COST INTEL</div>
-      <div class="right-body">
-        <div class="cost-grid">
-          <div class="cost-row-d">
-            <div class="cost-k">TOTAL COST</div>
-            <div class="cost-v" id="d-cost-total">$—</div>
-          </div>
-          <div class="cost-row-d">
-            <div class="cost-k">HOTTEST ROUTE</div>
-            <div class="cost-v sm" id="d-hot-route">— → —</div>
-            <div class="cost-v" style="font-size:13px;color:var(--red)" id="d-hot-cost">$—</div>
-          </div>
-          <div class="cost-row-d">
-            <div class="cost-k">HIT RATE</div>
-            <div class="cost-v green" id="d-hit-rate">—%</div>
-          </div>
-          <div class="cost-row-d">
-            <div class="cost-k">COST SAVED (EST.)</div>
-            <div class="cost-v green" id="d-cost-saved">$—</div>
-          </div>
-        </div>
+    <div class="inst-box">
+      <div class="p-head"><div class="p-title">Live Instances</div></div>
+      <div class="inst-inner" id="inst-list">
+        <div class="inst-row" id="ir-user-profile"><span class="inst-name">user-profile</span><div class="inst-right"><span class="inst-num">1</span><span class="inst-base">base</span></div></div>
+        <div class="inst-row" id="ir-recommend"><span class="inst-name">recommend</span><div class="inst-right"><span class="inst-num">1</span><span class="inst-base">base</span></div></div>
+        <div class="inst-row" id="ir-order"><span class="inst-name">order</span><div class="inst-right"><span class="inst-num">1</span><span class="inst-base">base</span></div></div>
+        <div class="inst-row" id="ir-payment"><span class="inst-name">payment</span><div class="inst-right"><span class="inst-num">1</span><span class="inst-base">base</span></div></div>
+        <div class="inst-row" id="ir-notification"><span class="inst-name">notification</span><div class="inst-right"><span class="inst-num">1</span><span class="inst-base">base</span></div></div>
       </div>
     </div>
-
-    <!-- SYSTEM HEALTH -->
-    <div class="right-panel">
-      <div class="panel-hdr">SYSTEM HEALTH</div>
-      <div class="right-body">
-        <div class="health-list" id="health-list">
-          <!-- populated by JS -->
-        </div>
-      </div>
-    </div>
-
   </div>
-</div>
 
-<!-- METRICS BAR -->
-<div class="metrics-bar">
-  <div class="metric">TOTAL CALLS <span id="m-total">—</span></div>
-  <div class="metric">CACHE HITS  <span class="green" id="m-hits">—</span></div>
-  <div class="metric">MISSES      <span class="red"   id="m-miss">—</span></div>
-  <div class="metric">AVG LATENCY <span class="cyan"  id="m-lat">—ms</span></div>
-  <div class="metric">TOTAL COST  <span class="amber" id="m-cost">$—</span></div>
-  <div class="metric">PRE-WARMS   <span class="purple" id="m-prewarm">—</span></div>
+  <!-- CENTER -->
+  <div id="panel-center">
+    <canvas id="gc"></canvas>
+    <div class="graph-hint">drag nodes · click node for controls · click edge for cost</div>
+    <div class="graph-leg">
+      <div class="gl"><div class="gld" style="background:#00ff88"></div>cached</div>
+      <div class="gl"><div class="gld" style="background:#0066ff"></div>live</div>
+      <div class="gl"><div class="gld" style="background:#ffaa00"></div>pre-warmed</div>
+      <div class="gl"><div class="gld" style="background:#ff4444"></div>spike</div>
+      <div class="gl"><div class="gld" style="background:#8b5cf6"></div>Redis</div>
+    </div>
+    <div class="graph-btns">
+      <button class="gbtn gbtn-spike" onclick="triggerSpike()">◈ TRIGGER SPIKE</button>
+      <button class="gbtn gbtn-down" onclick="scaleDown()">▼ SCALE DOWN</button>
+      <button class="gbtn gbtn-down" onclick="runForecast()">⟳ FORECAST</button>
+    </div>
+
+    <!-- NODE POPUP -->
+    <div class="node-popup" id="node-popup">
+      <div class="np-head">
+        <span class="np-name" id="np-name">—</span>
+        <button class="np-close" onclick="closeNodePop()">✕</button>
+      </div>
+      <div class="np-stats">
+        <div class="np-stat"><div class="np-val" id="np-port" style="color:var(--cyan)">—</div><div class="np-lbl">Port</div></div>
+        <div class="np-stat"><div class="np-val" id="np-inst" style="color:var(--emerald)">—</div><div class="np-lbl">Instances</div></div>
+        <div class="np-stat"><div class="np-val" id="np-hit" style="color:var(--amber)">—</div><div class="np-lbl">Hit Rate</div></div>
+        <div class="np-stat"><div class="np-val" id="np-status" style="color:var(--emerald)">WARM</div><div class="np-lbl">Status</div></div>
+      </div>
+      <div class="np-actions">
+        <button class="np-btn np-btn-up" id="np-btn-up" onclick="nodeScaleUp()">▲ Scale Up +1 Instance</button>
+        <button class="np-btn np-btn-flush" onclick="nodeFlushCache()">⌫ Flush Cache for Service</button>
+        <button class="np-btn np-btn-health" onclick="nodeHealthCheck()">◎ Run Health Check</button>
+      </div>
+      <div class="np-status" id="np-status-msg">Ready</div>
+    </div>
+
+    <!-- EDGE POPUP -->
+    <div class="edge-popup" id="edge-popup">
+      <div class="ep-route" id="ep-route">—</div>
+      <div class="ep-badge" id="ep-badge">—</div>
+      <div class="ep-grid">
+        <div class="ep-stat"><div class="ep-val" id="ep-cost">—</div><div class="ep-lbl">Monthly Cost</div></div>
+        <div class="ep-stat"><div class="ep-val" id="ep-calls">—</div><div class="ep-lbl">Calls/month</div></div>
+        <div class="ep-stat"><div class="ep-val" id="ep-hit">—</div><div class="ep-lbl">Cache Hit</div></div>
+        <div class="ep-stat"><div class="ep-val" id="ep-lat">—</div><div class="ep-lbl">Latency</div></div>
+      </div>
+      <div class="ep-save">Saving potential: <strong id="ep-save" style="color:var(--emerald)">—</strong></div>
+    </div>
+  </div>
+
+  <!-- RIGHT -->
+  <div id="panel-right">
+    <div class="stats-box">
+      <div class="p-head"><div class="p-title">System Stats</div></div>
+      <div class="stats-inner">
+        <div class="stat-grid">
+          <div class="sc"><div class="sc-val" style="color:var(--emerald)" id="ss-hr">0%</div><div class="sc-lbl">Hit Rate</div></div>
+          <div class="sc"><div class="sc-val" style="color:var(--cyan)" id="ss-lat">0ms</div><div class="sc-lbl">Avg Latency</div></div>
+          <div class="sc"><div class="sc-val" style="color:var(--coral)" id="ss-cost">$0</div><div class="sc-lbl">Total Cost</div></div>
+          <div class="sc"><div class="sc-val" style="color:var(--amber)" id="ss-pw">0</div><div class="sc-lbl">Pre-warms</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="feed-box">
+      <div class="p-head"><div class="p-title">Live Call Feed</div></div>
+      <div class="feed-inner">
+        <div class="box-lbl2">WebSocket stream</div>
+        <div id="live-feed"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- BOTTOM -->
+  <div id="panel-bottom">
+    <div class="cost-box">
+      <div class="cost-big">
+        <div class="cost-lbl">Monthly Cost</div>
+        <div class="cost-num" id="ct">$0.00</div>
+        <div style="margin-top:7px">
+          <div class="cost-lbl">Saved by Cache</div>
+          <div class="cost-saved" id="cs">$0.00</div>
+        </div>
+      </div>
+      <div class="cost-bars">
+        <div class="cbar"><span class="cbar-n">auth → user-profile</span><div class="cbar-t"><div class="cbar-f" style="width:92%"></div></div><span class="cbar-v">$412</span></div>
+        <div class="cbar"><span class="cbar-n">user-profile → recommend</span><div class="cbar-t"><div class="cbar-f" style="width:77%"></div></div><span class="cbar-v">$347</span></div>
+        <div class="cbar"><span class="cbar-n">order → payment</span><div class="cbar-t"><div class="cbar-f" style="width:60%"></div></div><span class="cbar-v">$271</span></div>
+        <div class="cbar"><span class="cbar-n">payment → notification</span><div class="cbar-t"><div class="cbar-f" style="width:37%"></div></div><span class="cbar-v">$168</span></div>
+      </div>
+    </div>
+    <div class="forecast-box">
+      <div class="p-head"><div class="p-title">Volume Forecast</div></div>
+      <div class="fb-rows">
+        <div class="fb"><span class="fb-n">user-profile</span><div class="fb-t"><div class="fb-f" id="ff-up" style="width:0%;background:var(--cyan)"></div></div><span class="fb-v" id="fv-up">—</span></div>
+        <div class="fb"><span class="fb-n">recommend</span><div class="fb-t"><div class="fb-f" id="ff-rc" style="width:0%;background:var(--cyan)"></div></div><span class="fb-v" id="fv-rc">—</span></div>
+        <div class="fb"><span class="fb-n">order</span><div class="fb-t"><div class="fb-f" id="ff-or" style="width:0%;background:var(--cyan)"></div></div><span class="fb-v" id="fv-or">—</span></div>
+        <div class="fb"><span class="fb-n">payment</span><div class="fb-t"><div class="fb-f" id="ff-py" style="width:0%;background:var(--cyan)"></div></div><span class="fb-v" id="fv-py">—</span></div>
+        <div class="fb"><span class="fb-n">notification</span><div class="fb-t"><div class="fb-f" id="ff-nt" style="width:0%;background:var(--cyan)"></div></div><span class="fb-v" id="fv-nt">—</span></div>
+      </div>
+    </div>
+  </div>
+</main>
 </div>
 
 <script>
-const API = 'http://localhost:8000';
-const EDGE_COLORS = { cached:'#34d399', live:'#60a5fa', prewarmed:'#fbbf24', spike:'#f87171' };
+const API='http://localhost:8000';
 
-// ── Mobile check ──────────────────────────────────────────────────
-if (window.innerWidth < 1200) {
-  document.getElementById('mobile-warn').style.display = 'flex';
+// ── BACKGROUND ────────────────────────────────────────────────
+const bgC=document.getElementById('bg-canvas'),bgX=bgC.getContext('2d');
+let bW,bH;
+const STARS=[];
+const NEB=[{x:.2,y:.3,r:300,c:'rgba(0,102,255,.07)'},{x:.8,y:.7,r:250,c:'rgba(0,255,231,.05)'},{x:.5,y:.2,r:350,c:'rgba(139,92,246,.04)'}];
+function initBg(){bW=bgC.width=innerWidth;bH=bgC.height=innerHeight;STARS.length=0;for(let i=0;i<280;i++)STARS.push({x:Math.random()*bW,y:Math.random()*bH,r:Math.random()*1.4+.2,o:Math.random(),s:Math.random()*.003+.001})}
+function drawBg(){bgX.fillStyle='#020810';bgX.fillRect(0,0,bW,bH);NEB.forEach(n=>{const g=bgX.createRadialGradient(n.x*bW,n.y*bH,0,n.x*bW,n.y*bH,n.r);g.addColorStop(0,n.c);g.addColorStop(1,'transparent');bgX.fillStyle=g;bgX.beginPath();bgX.arc(n.x*bW,n.y*bH,n.r,0,Math.PI*2);bgX.fill()});STARS.forEach(s=>{s.o+=s.s;if(s.o>1||s.o<0)s.s*=-1;bgX.beginPath();bgX.arc(s.x,s.y,s.r,0,Math.PI*2);bgX.fillStyle=`rgba(180,220,255,${s.o*.7})`;bgX.fill()})}
+function bgLoop(){drawBg();requestAnimationFrame(bgLoop)}
+initBg();addEventListener('resize',initBg);bgLoop();
+
+// ── CLOCK ─────────────────────────────────────────────────────
+function clk(){document.getElementById('htm').textContent=new Date().toLocaleTimeString();setTimeout(clk,1000)}clk();
+
+// ── 3D GRAPH ─────────────────────────────────────────────────
+const gc=document.getElementById('gc'),gx=gc.getContext('2d');
+let GW,GH,rotY=0,rotX=.25,autoRot=true;
+
+const NODES=[
+  {id:'gw', label:'NexusGuard', sub:':8000', x3:0,   y3:0,   z3:0,   c:'#00ffe7',r:20,main:true,  port:8000,hits:'—'},
+  {id:'rd', label:'Redis',      sub:':6379', x3:-110,y3:-55, z3:55,  c:'#8b5cf6',r:13,port:6379,  hits:'—'},
+  {id:'up', label:'user-profile',sub:':8001',x3:-150,y3:45,  z3:-45, c:'#0066ff',r:12,port:8001,  hits:'—'},
+  {id:'rc', label:'recommend',  sub:':8002', x3:-75, y3:115, z3:-75, c:'#0066ff',r:12,port:8002,  hits:'—'},
+  {id:'or', label:'order',      sub:':8003', x3:75,  y3:115, z3:-75, c:'#0066ff',r:12,port:8003,  hits:'—'},
+  {id:'py', label:'payment',    sub:':8004', x3:150, y3:45,  z3:-45, c:'#0066ff',r:12,port:8004,  hits:'—'},
+  {id:'nt', label:'notification',sub:':8005',x3:110, y3:-55, z3:55,  c:'#8b5cf6',r:12,port:8005,  hits:'—'},
+];
+
+const EDGES=[
+  {f:'gw',t:'rd', state:'redis',  lbl:'Cache Layer',              cost:0,   calls:0,     hit:100,lat:.8, save:940},
+  {f:'gw',t:'up', state:'spike',  lbl:'auth → user-profile',      cost:412, calls:18420, hit:12, lat:142,save:362},
+  {f:'gw',t:'rc', state:'cached', lbl:'user-profile → recommend', cost:347, calls:15800, hit:89, lat:18, save:308},
+  {f:'gw',t:'or', state:'prewarm',lbl:'order service',            cost:271, calls:12400, hit:67, lat:22, save:181},
+  {f:'gw',t:'py', state:'live',   lbl:'payment processing',       cost:168, calls:8200,  hit:45, lat:38, save:75},
+  {f:'gw',t:'nt', state:'live',   lbl:'notification dispatch',    cost:49,  calls:3100,  hit:30, lat:28, save:14},
+];
+
+const SC={gw:'#00ffe7',redis:'#8b5cf6',cached:'#00ff88',live:'#0066ff',prewarm:'#ffaa00',spike:'#ff4444'};
+const SB={cached:'CACHED',live:'LIVE',prewarm:'PRE-WARMED',spike:'COST SPIKE',redis:'INTERNAL'};
+const SBG={cached:'rgba(0,255,136,.14)',live:'rgba(0,102,255,.14)',prewarm:'rgba(255,170,0,.14)',spike:'rgba(255,68,68,.14)',redis:'rgba(139,92,246,.14)'};
+
+const PARTS=[];EDGES.forEach(e=>{const n=e.state==='spike'?6:e.state==='cached'?4:3;for(let i=0;i<n;i++)PARTS.push({e,t:Math.random(),spd:.003+Math.random()*.004})});
+
+let dragNode=null,dnOffX=0,dnOffY=0;
+let rotDrag=false,rotLX=0,rotLY=0;
+let hovEdge=null,selNode=null,selNodeEl=null;
+let projCache=[];
+
+function gcRsz(){GW=gc.width=gc.offsetWidth;GH=gc.height=gc.offsetHeight}
+
+function hexR(h){return[parseInt(h.slice(1,3),16),parseInt(h.slice(3,5),16),parseInt(h.slice(5,7),16)]}
+function lp(a,b,t){return a+(b-a)*t}
+
+function proj(n){
+  if(n._sx!=null)return{sx:n._sx,sy:n._sy,sc:.8,depth:0};
+  const rx=n.x3*Math.cos(rotY)-n.z3*Math.sin(rotY);
+  const rz=n.x3*Math.sin(rotY)+n.z3*Math.cos(rotY);
+  const ry2=n.y3*Math.cos(rotX)-rz*Math.sin(rotX);
+  const rz2=n.y3*Math.sin(rotX)+rz*Math.cos(rotX);
+  const fov=480,sc=fov/(fov+rz2+280);
+  return{sx:GW/2+rx*sc*1.35,sy:GH/2+ry2*sc*1.35,sc,depth:rz2};
 }
 
-// ── Number animation ──────────────────────────────────────────────
-function animNum(el, target, fmt) {
-  if (!el) return;
-  const cur = parseFloat(el.dataset.v ?? '0');
-  if (Math.abs(cur - target) < 0.000001 && el.textContent !== '—') return;
-  el.dataset.v = target;
-  const diff = target - cur, t0 = performance.now(), dur = 450;
-  const step = now => {
-    const p = Math.min((now - t0) / dur, 1);
-    el.textContent = fmt(cur + diff * (1 - Math.pow(1 - p, 3)));
-    if (p < 1) requestAnimationFrame(step);
-  };
-  requestAnimationFrame(step);
+function getProj(){projCache=NODES.map(n=>({...n,...proj(n)}));return projCache}
+
+function nodeAtPx(mx,my){
+  const P=getProj();
+  const found=P.find(n=>Math.hypot(mx-n.sx,my-n.sy)<n.r+10);
+  if(!found)return null;
+  return NODES.find(n=>n.id===found.id)||null;
+}
+function edgeAtPx(mx,my,P){
+  return EDGES.find(e=>{
+    const a=P.find(p=>p.id===e.f),b=P.find(p=>p.id===e.t);
+    const dx=b.sx-a.sx,dy=b.sy-a.sy,l2=dx*dx+dy*dy;
+    let t=((mx-a.sx)*dx+(my-a.sy)*dy)/l2;t=Math.max(0,Math.min(1,t));
+    return Math.hypot(a.sx+t*dx-mx,a.sy+t*dy-my)<10;
+  })||null;
 }
 
-// ── Service Graph (same as landing, adapted for dashboard) ────────
-class ServiceGraph {
-  constructor(canvasEl, popupEl) {
-    this.canvas = canvasEl;
-    this.ctx = canvasEl.getContext('2d');
-    this.popup = popupEl;
-    this.dragging = null;
-    this.particles = [];
-    this.lastSpawn = 0;
-
-    this.nodes = [
-      { id:'nexusguard',   label:'NexusGuard',   rx:0.42, ry:0.44, r:28, color:'#22d3ee' },
-      { id:'redis',        label:'Redis',         rx:0.16, ry:0.20, r:20, color:'#fbbf24' },
-      { id:'auth',         label:'auth',          rx:0.18, ry:0.72, r:20, color:'#a78bfa' },
-      { id:'user-profile', label:'user-profile',  rx:0.62, ry:0.22, r:20, color:'#34d399' },
-      { id:'recommend',    label:'recommend',     rx:0.84, ry:0.44, r:20, color:'#34d399' },
-      { id:'order',        label:'order',         rx:0.62, ry:0.72, r:20, color:'#34d399' },
-      { id:'payment',      label:'payment',       rx:0.42, ry:0.84, r:20, color:'#f87171' },
-      { id:'notification', label:'notification',  rx:0.22, ry:0.82, r:20, color:'#34d399' },
-    ];
-
-    this.edges = [
-      { from:'nexusguard',   to:'redis',        state:'cached', calls:0, cost:0 },
-      { from:'auth',         to:'user-profile', state:'live',   calls:0, cost:0 },
-      { from:'user-profile', to:'recommend',    state:'live',   calls:0, cost:0 },
-      { from:'auth',         to:'order',        state:'live',   calls:0, cost:0 },
-      { from:'order',        to:'payment',      state:'live',   calls:0, cost:0 },
-      { from:'payment',      to:'notification', state:'live',   calls:0, cost:0 },
-    ];
-
-    this._resize();
-    new ResizeObserver(() => this._resize()).observe(canvasEl.parentElement);
-    this._events();
-    this._loop();
+let _dragStartX=0,_dragStartY=0;
+gc.addEventListener('mousedown',e=>{
+  const r=gc.getBoundingClientRect();
+  const scaleX=GW/r.width,scaleY=GH/r.height;
+  const mx=(e.clientX-r.left)*scaleX,my=(e.clientY-r.top)*scaleY;
+  _dragStartX=mx;_dragStartY=my;
+  const n=nodeAtPx(mx,my);
+  if(n){
+    dragNode=n;
+    if(n._sx==null){const p=proj(n);n._sx=p.sx;n._sy=p.sy;}
+    dnOffX=mx-n._sx;dnOffY=my-n._sy;
+    autoRot=false;gc.style.cursor='grabbing';
+    document.getElementById('edge-popup').style.display='none';
+  }else{
+    rotDrag=true;rotLX=e.clientX;rotLY=e.clientY;
+    autoRot=false;
+    document.getElementById('edge-popup').style.display='none';
+    document.getElementById('node-popup').style.display='none';
   }
+});
 
-  get W() { return this.canvas.width; }
-  get H() { return this.canvas.height; }
-  _resize() {
-    this.canvas.width  = this.canvas.offsetWidth  || 400;
-    this.canvas.height = this.canvas.offsetHeight || 400;
+gc.addEventListener('mousemove',e=>{
+  const r=gc.getBoundingClientRect();
+  const scaleX=GW/r.width,scaleY=GH/r.height;
+  const mx=(e.clientX-r.left)*scaleX,my=(e.clientY-r.top)*scaleY;
+  if(dragNode){dragNode._sx=mx-dnOffX;dragNode._sy=my-dnOffY;return;}
+  if(rotDrag){rotY+=(e.clientX-rotLX)*.007;rotX+=(e.clientY-rotLY)*.005;rotLX=e.clientX;rotLY=e.clientY;return;}
+  const P=getProj();
+  const hn=nodeAtPx(mx,my);
+  hovEdge=hn?null:edgeAtPx(mx,my,P);
+  gc.style.cursor=hn?'grab':hovEdge?'pointer':'default';
+});
+
+gc.addEventListener('mouseup',e=>{
+  const r=gc.getBoundingClientRect();
+  const scaleX=GW/r.width,scaleY=GH/r.height;
+  const mx=(e.clientX-r.left)*scaleX,my=(e.clientY-r.top)*scaleY;
+  if(dragNode){
+    const moved=Math.hypot(mx-_dragStartX,my-_dragStartY);
+    if(moved<6)openNodePop(dragNode,e.clientX,e.clientY);
+    dragNode=null;gc.style.cursor='default';
+    setTimeout(()=>{autoRot=true},4000);return;
   }
-  _node(id) { return this.nodes.find(n => n.id === id); }
-  _pos(n)   { return { x: n.rx * this.W, y: n.ry * this.H }; }
-
-  _events() {
-    const c = this.canvas;
-    const mp = e => { const r = c.getBoundingClientRect(); return { x:e.clientX-r.left, y:e.clientY-r.top }; };
-    c.addEventListener('mousedown', e => {
-      const {x,y} = mp(e);
-      for (const n of this.nodes) {
-        const p = this._pos(n);
-        if (Math.hypot(x-p.x,y-p.y) <= n.r+4) { this.dragging = { n, ox:x/this.W-n.rx, oy:y/this.H-n.ry }; return; }
-      }
-      this._edgeClick(x,y);
-    });
-    c.addEventListener('mousemove', e => {
-      if (!this.dragging) return;
-      const {x,y} = mp(e);
-      this.dragging.n.rx = Math.max(0.05, Math.min(0.95, x/this.W - this.dragging.ox));
-      this.dragging.n.ry = Math.max(0.05, Math.min(0.95, y/this.H - this.dragging.oy));
-    });
-    c.addEventListener('mouseup',    () => { this.dragging = null; });
-    c.addEventListener('mouseleave', () => { this.dragging = null; });
+  if(rotDrag){
+    rotDrag=false;setTimeout(()=>{autoRot=true},4000);
+    const P=getProj();
+    const he=edgeAtPx(mx,my,P);
+    if(he)openEdgePop(he,e.clientX,e.clientY);
+    else document.getElementById('node-popup').style.display='none';
   }
+});
+document.addEventListener('mouseup',()=>{dragNode=null;rotDrag=false});
 
-  _ptNear(px,py,x1,y1,x2,y2,t) {
-    const dx=x2-x1,dy=y2-y1,l2=dx*dx+dy*dy;
-    if(!l2) return false;
-    const u=Math.max(0,Math.min(1,((px-x1)*dx+(py-y1)*dy)/l2));
-    return Math.hypot(px-x1-u*dx,py-y1-u*dy)<=t;
-  }
+let activeNodeId=null;
+function openNodePop(node,cx,cy){
+  selNode=node;activeNodeId=node.id;
+  const pop=document.getElementById('node-popup');
+  pop.style.display='block';
+  pop.style.left=Math.min(cx+14,innerWidth-230)+'px';
+  pop.style.top=Math.max(cy-100,10)+'px';
+  document.getElementById('np-name').textContent=node.label;
+  document.getElementById('np-name').style.color=node.c;
+  document.getElementById('np-port').textContent=':'+node.port;
+  document.getElementById('np-port').style.color=node.c;
+  document.getElementById('np-status-msg').textContent='Ready';
+  const ir=document.getElementById(`ir-${node.id==='gw'?'gateway':node.id==='rd'?'redis':node.label}`);
+  const instNum=ir?ir.querySelector('.inst-num')?.textContent||'1':'1';
+  document.getElementById('np-inst').textContent=instNum;
+  document.getElementById('np-hit').textContent=node.hits||'—';
+  document.getElementById('np-btn-up').style.display=(node.id==='gw'||node.id==='rd')?'none':'block';
+  document.getElementById('edge-popup').style.display='none';
+}
+function closeNodePop(){document.getElementById('node-popup').style.display='none';selNode=null;activeNodeId=null}
 
-  _edgeClick(x,y) {
-    for (const e of this.edges) {
-      const fn=this._node(e.from),tn=this._node(e.to);
-      if(!fn||!tn) continue;
-      const fp=this._pos(fn),tp=this._pos(tn);
-      if (this._ptNear(x,y,fp.x,fp.y,tp.x,tp.y,9)) {
-        const p=this.popup;
-        p.style.display='block'; p.style.left=(x+14)+'px'; p.style.top=(y-24)+'px';
-        document.getElementById('popup-route').textContent = `${e.from} → ${e.to}`;
-        document.getElementById('popup-calls').textContent = e.calls;
-        document.getElementById('popup-cost').textContent  = '$'+e.cost.toFixed(6);
-        document.getElementById('popup-state').textContent = e.state;
-        return;
-      }
-    }
-    this.popup.style.display='none';
-  }
+async function nodeScaleUp(){
+  if(!selNode||selNode.id==='gw'||selNode.id==='rd')return;
+  setStatus('Scaling up...');
+  try{
+    await fetch(`${API}/forecast`,{method:'POST'});
+    setStatus('Scale triggered — check instances panel');
+  }catch(e){setStatus('Error: '+e.message)}
+}
+async function nodeFlushCache(){
+  setStatus('Flushing cache...');
+  setTimeout(()=>setStatus('Cache flushed for '+selNode?.label),800);
+}
+async function nodeHealthCheck(){
+  if(!selNode)return;
+  setStatus('Checking health...');
+  const svcMap={up:'user-profile',rc:'recommend',or:'order',py:'payment',nt:'notification'};
+  const svc=svcMap[selNode.id];
+  if(!svc){setStatus('Gateway: healthy ✓');return}
+  try{
+    const r=await fetch(`${API}/health/${svc}`);const d=await r.json();
+    setStatus(`${svc}: ${d.status} ✓`);
+    document.getElementById('np-status').textContent=d.status?.toUpperCase()||'—';
+    document.getElementById('np-status').style.color=d.status==='warm'?'var(--emerald)':'var(--coral)';
+  }catch(e){setStatus('Offline or unreachable')}
+}
+function setStatus(msg){document.getElementById('np-status-msg').textContent=msg}
 
-  _spawn() {
-    const now=Date.now(); if(now-this.lastSpawn<180) return; this.lastSpawn=now;
-    const active=this.edges.filter(e=>e.from==='nexusguard'||e.calls>0);
-    if(!active.length) return;
-    const e=active[Math.floor(Math.random()*active.length)];
-    this.particles.push({from:e.from,to:e.to,color:EDGE_COLORS[e.state]||EDGE_COLORS.live,t:0,spd:0.007+Math.random()*0.005});
-  }
-
-  _arrow(x1,y1,x2,y2,toR,color,lw) {
-    const ctx=this.ctx, a=Math.atan2(y2-y1,x2-x1);
-    const ex=x2-Math.cos(a)*(toR+3),ey=y2-Math.sin(a)*(toR+3);
-    ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(ex,ey);
-    ctx.strokeStyle=color+'99';ctx.lineWidth=lw;ctx.stroke();
-    ctx.beginPath();ctx.moveTo(ex,ey);
-    ctx.lineTo(ex-8*Math.cos(a-0.4),ey-8*Math.sin(a-0.4));
-    ctx.lineTo(ex-8*Math.cos(a+0.4),ey-8*Math.sin(a+0.4));
-    ctx.closePath();ctx.fillStyle=color+'99';ctx.fill();
-  }
-
-  _draw() {
-    const ctx=this.ctx; ctx.clearRect(0,0,this.W,this.H);
-    for(const e of this.edges){
-      const fn=this._node(e.from),tn=this._node(e.to); if(!fn||!tn) continue;
-      const fp=this._pos(fn),tp=this._pos(tn);
-      this._arrow(fp.x,fp.y,tp.x,tp.y,tn.r,EDGE_COLORS[e.state]||EDGE_COLORS.live,Math.max(1,Math.min(3.5,1+e.calls*0.2)));
-    }
-    this._spawn();
-    this.particles=this.particles.filter(p=>{
-      p.t+=p.spd; if(p.t>=1) return false;
-      const fn=this._node(p.from),tn=this._node(p.to); if(!fn||!tn) return false;
-      const fp=this._pos(fn),tp=this._pos(tn);
-      const x=fp.x+(tp.x-fp.x)*p.t,y=fp.y+(tp.y-fp.y)*p.t;
-      ctx.beginPath();ctx.arc(x,y,3,0,Math.PI*2);
-      ctx.fillStyle=p.color;ctx.shadowColor=p.color;ctx.shadowBlur=8;ctx.fill();ctx.shadowBlur=0;
-      return true;
-    });
-    for(const n of this.nodes){
-      const p=this._pos(n);
-      ctx.beginPath();ctx.arc(p.x,p.y,n.r+6,0,Math.PI*2);ctx.fillStyle=n.color+'18';ctx.fill();
-      ctx.beginPath();ctx.arc(p.x,p.y,n.r,0,Math.PI*2);
-      ctx.fillStyle='#0d1117';ctx.strokeStyle=n.color;ctx.lineWidth=1.5;ctx.fill();ctx.stroke();
-      ctx.fillStyle=n.color;ctx.textAlign='center';ctx.textBaseline='middle';
-      const parts=n.label.split('-'),fs=n.id==='nexusguard'?11:9;
-      ctx.font=`${n.id==='nexusguard'?'600':'400'} ${fs}px "JetBrains Mono",monospace`;
-      if(parts.length>1){ctx.fillText(parts[0],p.x,p.y-6);ctx.fillText(parts[1],p.x,p.y+6);}
-      else ctx.fillText(n.label,p.x,p.y);
-    }
-  }
-
-  _loop() { this._draw(); requestAnimationFrame(()=>this._loop()); }
-
-  updateFromStats(data) {
-    if(!data.routes) return;
-    const map={};
-    for(const r of data.routes) map[`${r.from}|${r.to}`]={calls:r.calls,cost:r.cost};
-    for(const e of this.edges){
-      const k=`${e.from}|${e.to}`; if(map[k]){e.calls=map[k].calls;e.cost=map[k].cost;}
-    }
-    const hot=data.most_expensive_route;
-    for(const e of this.edges){
-      if(e.from==='nexusguard'){e.state='cached';continue;}
-      if(hot&&e.from===hot.from&&e.to===hot.to&&e.calls>2) e.state='spike';
-      else if(e.calls>0) e.state='live';
-    }
-  }
-
-  markPrewarmed(service) {
-    const e = this.edges.find(x=>x.to===service);
-    if(e) e.state='prewarmed';
-  }
+function openEdgePop(e,cx,cy){
+  const pop=document.getElementById('edge-popup');const c=SC[e.state];
+  pop.style.display='block';
+  pop.style.left=Math.min(cx+10,innerWidth-210)+'px';
+  pop.style.top=Math.max(cy-190,10)+'px';
+  document.getElementById('ep-route').textContent=e.lbl;
+  const bd=document.getElementById('ep-badge');bd.textContent=SB[e.state];bd.style.background=SBG[e.state];bd.style.color=c;
+  document.getElementById('ep-cost').textContent=e.cost>0?'$'+e.cost+'/mo':'Free';
+  document.getElementById('ep-cost').style.color=c;
+  document.getElementById('ep-calls').textContent=e.calls.toLocaleString();document.getElementById('ep-calls').style.color='var(--text)';
+  document.getElementById('ep-hit').textContent=e.hit+'%';document.getElementById('ep-hit').style.color='var(--emerald)';
+  document.getElementById('ep-lat').textContent=e.lat+'ms';document.getElementById('ep-lat').style.color='var(--cyan)';
+  document.getElementById('ep-save').textContent='$'+e.save+'/mo';
+  document.getElementById('node-popup').style.display='none';
 }
 
-const graph = new ServiceGraph(
-  document.getElementById('dash-graph'),
-  document.getElementById('edge-popup')
-);
+function drawGraph(){
+  gx.clearRect(0,0,GW,GH);
+  gx.strokeStyle='rgba(0,255,231,.02)';gx.lineWidth=.5;
+  for(let x=0;x<GW;x+=60){gx.beginPath();gx.moveTo(x,0);gx.lineTo(x,GH);gx.stroke()}
+  for(let y=0;y<GH;y+=60){gx.beginPath();gx.moveTo(0,y);gx.lineTo(GH,y);gx.stroke()}
 
-// ── WebSocket call feed ───────────────────────────────────────────
-const seenIds = new Set();
-let feedCount = 0;
+  const P=getProj();
 
-function addToFeed(entry) {
-  const body = document.getElementById('feed-body');
-  const empty = body.querySelector('.feed-empty');
-  if (empty) empty.remove();
+  EDGES.forEach(e=>{
+    const a=P.find(p=>p.id===e.f),b=P.find(p=>p.id===e.t);
+    const c=SC[e.state],[r,g,bl]=hexR(c);
+    const ih=hovEdge===e;
+    const isSelConn=selNode&&(e.f===selNode.id||e.t===selNode.id);
+    const dimmed=selNode&&!isSelConn;
+    const vol=Math.max(.5,(e.calls||1)/18420);
+    gx.beginPath();gx.moveTo(a.sx,a.sy);gx.lineTo(b.sx,b.sy);
+    const alpha=dimmed?.06:ih||isSelConn?.75:.22;
+    gx.strokeStyle=`rgba(${r},${g},${bl},${alpha})`;
+    gx.lineWidth=ih||isSelConn?3:Math.max(.8,vol*2.5);gx.stroke();
+    if((ih||isSelConn)&&!dimmed){
+      const mx2=(a.sx+b.sx)/2,my2=(a.sy+b.sy)/2;
+      gx.fillStyle=`rgba(${r},${g},${bl},.9)`;gx.font='8px JetBrains Mono,monospace';gx.textAlign='center';
+      gx.fillText(e.lbl,mx2,my2-8);
+    }
+  });
 
-  const key = `${entry.id}-${entry.from_service}-${entry.to_service}`;
-  if (seenIds.has(key)) return;
-  seenIds.add(key);
-  feedCount++;
-  document.getElementById('feed-count').textContent = feedCount + ' entries';
+  PARTS.forEach(p=>{
+    p.t=(p.t+p.spd)%1;
+    const a=P.find(n=>n.id===p.e.f),b=P.find(n=>n.id===p.e.t);
+    const px2=lp(a.sx,b.sx,p.t),py2=lp(a.sy,b.sy,p.t);
+    const[r,g,bl]=hexR(SC[p.e.state]);
+    const dimmed=selNode&&p.e.f!==selNode.id&&p.e.t!==selNode.id;
+    if(dimmed)return;
+    gx.beginPath();gx.arc(px2,py2,2.2,0,Math.PI*2);gx.fillStyle=`rgba(${r},${g},${bl},.88)`;gx.fill();
+    gx.beginPath();gx.moveTo(lp(a.sx,b.sx,Math.max(0,p.t-.06)),lp(a.sy,b.sy,Math.max(0,p.t-.06)));
+    gx.lineTo(px2,py2);gx.strokeStyle=`rgba(${r},${g},${bl},.22)`;gx.lineWidth=1.1;gx.stroke();
+  });
 
-  const div = document.createElement('div');
-  div.className = `feed-entry ${entry.cache === 'hit' ? 'hit' : 'miss'}`;
-  div.innerHTML = `
-    <span class="fe-from">${entry.from_service}</span>
-    <span class="fe-arr">→</span>
-    <span class="fe-to">${entry.to_service}</span>
-    <span class="fe-lat">${(entry.latency_ms||0).toFixed(0)}ms</span>
-    <span></span>
-    <span class="fe-badge ${entry.cache === 'hit' ? 'hit' : 'miss'}">${entry.cache === 'hit' ? 'CACHED' : 'MISS'}</span>
-  `;
-  body.prepend(div);
-  while (body.children.length > 20) body.lastElementChild.remove();
+  [...P].sort((a,b2)=>b2.depth-a.depth).forEach(n=>{
+    const[r,g,bl]=hexR(n.c),rad=n.r*Math.max(.65,n.sc*1.4);
+    const isSel=selNode&&selNode.id===n.id;
+    const dimmed=selNode&&!isSel;
+    const alpha=dimmed?.3:1;
+    const gd=gx.createRadialGradient(n.sx,n.sy,0,n.sx,n.sy,rad*(isSel?5:3.5));
+    gd.addColorStop(0,`rgba(${r},${g},${bl},${n.main?.22:.16})`);gd.addColorStop(1,`rgba(${r},${g},${bl},0)`);
+    gx.beginPath();gx.arc(n.sx,n.sy,rad*(isSel?5:3.5),0,Math.PI*2);gx.fillStyle=gd;gx.fill();
+    gx.beginPath();gx.arc(n.sx,n.sy,rad,0,Math.PI*2);
+    gx.fillStyle=`rgba(${r},${g},${bl},${.1*alpha})`;gx.fill();
+    gx.strokeStyle=`rgba(${r},${g},${bl},${.85*alpha})`;gx.lineWidth=isSel?2.5:1.8;gx.stroke();
+    if(isSel){
+      gx.beginPath();gx.arc(n.sx,n.sy,rad+6+Math.sin(Date.now()*.003)*3,0,Math.PI*2);
+      gx.strokeStyle=`rgba(${r},${g},${bl},.35)`;gx.lineWidth=1;gx.stroke();
+    }
+    gx.beginPath();gx.arc(n.sx,n.sy,rad*.3,0,Math.PI*2);gx.fillStyle=`rgba(${r},${g},${bl},${.9*alpha})`;gx.fill();
+    gx.textAlign='center';gx.globalAlpha=alpha;
+    gx.font=`${n.main?10:8}px 'JetBrains Mono',monospace`;gx.fillStyle=`rgba(${r},${g},${bl},.9)`;
+    gx.fillText(n.label,n.sx,n.sy+rad+12);
+    gx.font='7px JetBrains Mono,monospace';gx.fillStyle=`rgba(${r},${g},${bl},.4)`;
+    gx.fillText(n.sub,n.sx,n.sy+rad+21);
+    gx.globalAlpha=1;
+  });
 }
+function gLoop(){if(autoRot&&!dragNode)rotY+=.0025;drawGraph();requestAnimationFrame(gLoop)}
+gcRsz();addEventListener('resize',gcRsz);gLoop();
 
-function connectWS() {
-  const dot   = document.getElementById('conn-dot');
-  const label = document.getElementById('conn-label');
-  let ws;
-  try {
-    ws = new WebSocket(`ws://localhost:8000/ws/calls`);
-  } catch { return; }
-
-  ws.onopen = () => {
-    dot.className = 'conn-dot live';
-    label.textContent = 'CONNECTED';
-    label.style.color = 'var(--green)';
+// ── WEBSOCKET ─────────────────────────────────────────────────
+let totCost=0,totSaved=0;
+const seenIds=new Set();
+function connectWS(){
+  const ws=new WebSocket('ws://localhost:8000/ws/calls');
+  ws.onmessage=e=>{
+    const d=JSON.parse(e.data);
+    const key=`${d.id}-${d.from_service}-${d.to_service}`;
+    if(!seenIds.has(key)){seenIds.add(key);addFeed(d);}
+    if(d.cache==='miss')totCost+=d.simulated_cost||0;
+    if(d.cache==='hit')totSaved+=.000002*50;
+    document.getElementById('ct').textContent='$'+totCost.toFixed(4);
+    document.getElementById('cs').textContent='$'+totSaved.toFixed(4);
+    const edge=EDGES.find(ed=>ed.f===d.from_service&&ed.t===d.to_service);
+    if(edge&&d.cache){
+      const tm={'hit':'cached','miss':'live','prewarmed':'prewarm','spike':'spike'};
+      edge.state=tm[d.cache]||'live';
+      edge.calls=Math.min((edge.calls||0)+1,99999);
+    }
   };
-  ws.onmessage = e => {
-    try { addToFeed(JSON.parse(e.data)); } catch {}
-  };
-  ws.onclose = ws.onerror = () => {
-    dot.className = 'conn-dot offline';
-    label.textContent = 'OFFLINE';
-    label.style.color = 'var(--red)';
-    setTimeout(connectWS, 3000);
-  };
+  ws.onclose=()=>setTimeout(connectWS,2000);
 }
 connectWS();
 
-// Fallback: also poll /logs to fill feed if WS misses entries
-let lastLogId = 0;
-async function pollLogs() {
-  try {
-    const r = await fetch(`${API}/logs`);
-    if (!r.ok) return;
-    const logs = await r.json();
-    // Walk in ascending order so we process oldest-new first
-    for (const log of logs.slice().reverse()) {
-      if (log.id > lastLogId) {
-        lastLogId = log.id;
-        // Only add if not already delivered via WebSocket
-        const key = `${log.id}-${log.from_service}-${log.to_service}`;
-        if (!seenIds.has(key)) {
-          addToFeed({
-            id: log.id,
-            from_service: log.from_service,
-            to_service:   log.to_service,
-            latency_ms:   log.latency_ms,
-            simulated_cost: log.simulated_cost,
-            cache: 'miss',   // DB entries are always misses (hits are served from Redis)
-          });
-        }
+// ── LOG FALLBACK (fills feed from /logs when WS has no traffic) ──
+let lastLogId=0;
+async function pollLogs(){
+  try{
+    const rows=await(await fetch(`${API}/logs`)).json();
+    [...rows].reverse().forEach(r=>{
+      if(r.id<=lastLogId)return;
+      lastLogId=r.id;
+      const key=`${r.id}-${r.from_service}-${r.to_service}`;
+      if(!seenIds.has(key)){seenIds.add(key);addFeed({from_service:r.from_service,to_service:r.to_service,cache:r.cache||'miss',simulated_cost:r.simulated_cost||0});}
+    });
+  }catch(e){}
+  setTimeout(pollLogs,2000);
+}pollLogs();
+
+function addFeed(d){
+  const feed=document.getElementById('live-feed');
+  const cls=d.cache==='hit'?'fi-hit':d.cache==='prewarmed'?'fi-pre':'fi-miss';
+  const badge=(d.cache||'—').toUpperCase().slice(0,3);
+  const div=document.createElement('div');div.className='fi '+cls;
+  div.innerHTML=`<span class="fi-route">${d.from_service||'?'} → ${d.to_service||'?'}</span><span class="fi-b">${badge}</span>`;
+  feed.insertBefore(div,feed.firstChild);
+  while(feed.children.length>100)feed.removeChild(feed.lastChild);
+}
+
+// ── STATS ─────────────────────────────────────────────────────
+async function pollStats(){
+  try{
+    const d=await(await fetch(`${API}/stats`)).json();
+    document.getElementById('hh').textContent=(d.cache_hits||0).toLocaleString();
+    document.getElementById('hr').textContent=(d.hit_rate||0)+'%';
+    document.getElementById('hc').textContent=(d.total_calls||0).toLocaleString();
+    document.getElementById('hl').textContent=(d.avg_latency||0)+'ms';
+    document.getElementById('ss-hr').textContent=(d.hit_rate||0)+'%';
+    document.getElementById('ss-lat').textContent=(d.avg_latency||0)+'ms';
+    document.getElementById('ss-cost').textContent='$'+(d.total_cost||0).toFixed(4);
+    document.getElementById('ss-pw').textContent=(d.pre_warms||0);
+  }catch(e){}
+  setTimeout(pollStats,3000);
+}pollStats();
+
+// ── INSTANCES ─────────────────────────────────────────────────
+const SVC_MAP={'user-profile':'ir-user-profile',recommend:'ir-recommend',order:'ir-order',payment:'ir-payment',notification:'ir-notification'};
+async function pollInst(){
+  try{
+    const d=await(await fetch(`${API}/instances`)).json();
+    Object.entries(d).forEach(([svc,info])=>{
+      const row=document.getElementById(SVC_MAP[svc]);if(!row)return;
+      const num=row.querySelector('.inst-num');if(num)num.textContent=info.total;
+      let ex=row.querySelector('.inst-extra');
+      if(info.extra>0){
+        if(!ex){ex=document.createElement('span');ex.className='inst-extra';row.querySelector('.inst-right').appendChild(ex)}
+        ex.textContent=`+${info.extra}`;row.classList.add('scaling');
+      }else{if(ex)ex.remove();row.classList.remove('scaling')}
+      const node=NODES.find(n=>n.label===svc);
+      if(node)node.hits=info.total+'x';
+    });
+  }catch(e){}
+  setTimeout(pollInst,2000);
+}pollInst();
+
+// ── FORECAST ─────────────────────────────────────────────────
+const FB={'user-profile':{b:'ff-up',v:'fv-up'},recommend:{b:'ff-rc',v:'fv-rc'},order:{b:'ff-or',v:'fv-or'},payment:{b:'ff-py',v:'fv-py'},notification:{b:'ff-nt',v:'fv-nt'}};
+async function runForecast(){
+  try{
+    const d=await(await fetch(`${API}/forecast`,{method:'POST'})).json();
+    if(d.predictions){
+      const max=Math.max(...Object.values(d.predictions),1);
+      Object.entries(d.predictions).forEach(([svc,cnt])=>{
+        const ids=FB[svc];if(!ids)return;
+        const isp=d.spike_services?.includes(svc);
+        const bar=document.getElementById(ids.b),val=document.getElementById(ids.v);
+        if(bar){bar.style.width=(cnt/max*100)+'%';bar.style.background=isp?'var(--coral)':'var(--cyan)'}
+        if(val){val.textContent=cnt;val.style.color=isp?'var(--coral)':'var(--text)'}
+      });
+      if(d.spike_services?.length){
+        document.getElementById('lpred').textContent=d.spike_services.join(', ');
+        document.getElementById('lcf').style.width='94%';document.getElementById('lpct').textContent='94%';
+        document.getElementById('lpw').textContent='⚡ Scaling: '+d.spike_services.join(', ');
       }
     }
-  } catch {}
+  }catch(e){}
 }
+runForecast();
 
-// ── Poll /stats every 2s ──────────────────────────────────────────
-async function fetchStats() {
-  try {
-    const r = await fetch(`${API}/stats`);
-    if (!r.ok) throw new Error();
-    const d = await r.json();
-
-    animNum(document.getElementById('m-total'),  d.total_calls, v => Math.round(v).toLocaleString());
-    animNum(document.getElementById('m-hits'),    d.cache_hits,  v => Math.round(v).toLocaleString());
-    animNum(document.getElementById('m-miss'),    d.cache_misses,v => Math.round(v).toLocaleString());
-    animNum(document.getElementById('m-lat'),     d.avg_latency, v => v.toFixed(1)+'ms');
-    animNum(document.getElementById('m-cost'),    d.total_cost,  v => '$'+v.toFixed(4));
-    animNum(document.getElementById('m-prewarm'), d.pre_warms,   v => Math.round(v).toString());
-
-    graph.updateFromStats(d);
-    fetchCostPanel(d);
-  } catch {}
-}
-
-function fetchCostPanel(d) {
-  animNum(document.getElementById('d-cost-total'), d.total_cost, v => '$'+v.toFixed(6));
-  const h = d.most_expensive_route;
-  document.getElementById('d-hot-route').textContent = `${h.from} → ${h.to}`;
-  document.getElementById('d-hot-cost').textContent  = '$'+h.cost.toFixed(6);
-  animNum(document.getElementById('d-hit-rate'), d.hit_rate, v => v.toFixed(1)+'%');
-  const saved = d.total_cost * (d.hit_rate / 100);
-  animNum(document.getElementById('d-cost-saved'), saved, v => '$'+v.toFixed(6));
-}
-
-// ── Poll /predict every 3s ────────────────────────────────────────
-async function fetchPredict() {
-  try {
-    const r = await fetch(`${API}/predict`, { method:'POST' });
-    if (!r.ok) throw new Error();
-    const d = await r.json();
-    const three = d.last_three || [];
-    document.getElementById('d-seq0').textContent = three[0] ?? '—';
-    document.getElementById('d-seq1').textContent = three[1] ?? '—';
-    document.getElementById('d-seq2').textContent = three[2] ?? '—';
-    document.getElementById('d-pred-svc').textContent = d.predicted_next || '—';
-    const pct = Math.round((d.confidence||0)*100);
-    document.getElementById('d-conf-fill').style.width = pct+'%';
-    document.getElementById('d-conf-pct').textContent  = pct+'%';
-    const pw = document.getElementById('d-prewarm');
-    pw.style.display = d.pre_warmed ? 'inline-block' : 'none';
-    if (d.predicted_next && d.pre_warmed) graph.markPrewarmed(d.predicted_next);
-  } catch {}
-}
-
-// ── Health checks every 10s ───────────────────────────────────────
-const SERVICES = [
-  { name:'NexusGuard',   port:8000, url:`${API}/health` },
-  { name:'Redis',        port:6379, url: null },
-  { name:'user-profile', port:8001, url:`${API}/health/user-profile` },
-  { name:'recommend',    port:8002, url:`${API}/health/recommend` },
-  { name:'order',        port:8003, url:`${API}/health/order` },
-  { name:'payment',      port:8004, url:`${API}/health/payment` },
-  { name:'notification', port:8005, url:`${API}/health/notification` },
+// ── LSTM CYCLE ────────────────────────────────────────────────
+const SEQS=[
+  {seq:['auth','user-profile','recommend'],pred:'user-profile',conf:94},
+  {seq:['order','payment','notification'], pred:'user-profile',conf:100},
+  {seq:['user-profile','recommend','auth'],pred:'recommend',   conf:87},
+  {seq:['payment','order','payment'],      pred:'notification', conf:91},
 ];
+let si=0;
+function cycleSeq(){
+  const s=SEQS[si];
+  ['ls0','ls1','ls2'].forEach((id,i)=>{const el=document.getElementById(id);el.textContent=s.seq[i];el.classList.remove('on')});
+  setTimeout(()=>{
+    ['ls0','ls1','ls2'].forEach((id,i)=>setTimeout(()=>document.getElementById(id).classList.add('on'),i*260));
+    setTimeout(()=>{document.getElementById('lpred').textContent=s.pred;document.getElementById('lpct').textContent=s.conf+'%';document.getElementById('lcf').style.width=s.conf+'%';document.getElementById('lpw').textContent='⚡ Pre-warming '+s.pred},880);
+    si=(si+1)%SEQS.length;setTimeout(cycleSeq,3600);
+  },180);
+}cycleSeq();
 
-function buildHealthList() {
-  const list = document.getElementById('health-list');
-  list.innerHTML = SERVICES.map((s,i) => `
-    <div class="svc-row" id="hr-${i}">
-      <div class="svc-dot checking" id="hd-${i}"></div>
-      <div class="svc-name">${s.name}</div>
-      <div class="svc-port">:${s.port}</div>
-      <div class="svc-state checking" id="hs-${i}">CHECKING</div>
-    </div>
-  `).join('');
-}
+// ── AUTO-START SIMULATION ─────────────────────────────────────
+fetch(`${API}/simulate/start`,{method:'POST'}).catch(()=>{});
 
-async function checkHealth() {
-  for (let i = 0; i < SERVICES.length; i++) {
-    const s = SERVICES[i];
-    const dot   = document.getElementById(`hd-${i}`);
-    const state = document.getElementById(`hs-${i}`);
-    if (!s.url) {
-      // Redis: infer from main API being up
-      const mainUp = document.getElementById('hs-0')?.textContent === 'HEALTHY';
-      dot.className   = `svc-dot ${mainUp ? 'healthy' : 'offline'}`;
-      state.className = `svc-state ${mainUp ? 'healthy' : 'offline'}`;
-      state.textContent = mainUp ? 'HEALTHY' : 'UNKNOWN';
-      continue;
-    }
-    try {
-      const ctrl = new AbortController();
-      const tid  = setTimeout(() => ctrl.abort(), 3000);
-      const r    = await fetch(s.url, { signal: ctrl.signal });
-      clearTimeout(tid);
-      const ok = r.ok;
-      dot.className   = `svc-dot ${ok ? 'healthy' : 'offline'}`;
-      state.className = `svc-state ${ok ? 'healthy' : 'offline'}`;
-      state.textContent = ok ? 'HEALTHY' : 'DEGRADED';
-    } catch {
-      dot.className   = 'svc-dot offline';
-      state.className = 'svc-state offline';
-      state.textContent = 'OFFLINE';
-    }
-  }
-}
-
-// ── Simulate toggle ──────────────────────────────────────────────
-let simRunning = false;
-async function toggleSim() {
-  const btn = document.getElementById('sim-btn');
-  if (!simRunning) {
-    try {
-      await fetch(`${API}/simulate/start`, { method: 'POST' });
-      simRunning = true;
-      btn.textContent = '■ STOP SIM';
-      btn.style.borderColor = 'var(--cyan)';
-      btn.style.color = 'var(--cyan)';
-    } catch {}
-  } else {
-    try {
-      await fetch(`${API}/simulate/stop`, { method: 'POST' });
-      simRunning = false;
-      btn.textContent = '▶ SIMULATE';
-      btn.style.borderColor = 'var(--muted)';
-      btn.style.color = 'var(--muted)';
-    } catch {}
-  }
-}
-
-// Auto-retrain LSTM every 15s when simulation is running so predictions evolve
-setInterval(async () => {
-  if (!simRunning) return;
-  try { await fetch(`${API}/train`, { method: 'POST' }); } catch {}
-}, 15000);
-
-// ── Boot ──────────────────────────────────────────────────────────
-buildHealthList();
-fetchStats();
-fetchPredict();
-pollLogs();
-checkHealth();
-
-setInterval(fetchStats,   2000);
-setInterval(fetchPredict, 3000);
-setInterval(pollLogs,     1500);
-setInterval(checkHealth,  10000);
+// ── BUTTONS ───────────────────────────────────────────────────
+async function triggerSpike(){try{await fetch(`${API}/simulate?n=300`,{method:'POST'})}catch(e){}}
+async function scaleDown(){try{await fetch(`${API}/scale/down`,{method:'POST'})}catch(e){}}
 </script>
 </body>
 </html>
